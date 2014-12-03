@@ -17,8 +17,10 @@ gem 'rails_autolink', '~> 1.1'
 gem "default_value_for", "~> 3.0.0"
 
 # Supported DBs
-gem "mysql2", group: :mysql
-gem "pg", group: :postgres
+#gem "mysql2", group: :mysql
+#gem "pg", group: :postgres
+
+gem "sqlite3" # not officially supported
 
 # Auth
 gem "devise", '3.2.4'
