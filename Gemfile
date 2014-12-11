@@ -25,11 +25,11 @@ gem "sqlite3" # not officially supported
 # Auth
 gem "devise", '3.2.4'
 gem "devise-async", '0.9.0'
-gem 'omniauth', "~> 1.1.3"
-gem 'omniauth-google-oauth2'
-gem 'omniauth-twitter'
-gem 'omniauth-github'
-gem 'omniauth-shibboleth'
+#gem 'omniauth', "~> 1.1.3"
+#gem 'omniauth-google-oauth2'
+#gem 'omniauth-twitter'
+#gem 'omniauth-github'
+#gem 'omniauth-shibboleth'
 
 # Extracting information from a git repository
 # Provide access to Gitlab::Git library
@@ -79,7 +79,7 @@ gem 'dropzonejs-rails'
 gem "six"
 
 # Seed data
-gem "seed-fu"
+#gem "seed-fu"
 
 # Markup pipeline for GitLab
 gem 'html-pipeline-gitlab', '~> 0.1.0'

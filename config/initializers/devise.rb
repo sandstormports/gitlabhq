@@ -198,11 +198,11 @@ Devise.setup do |config|
   # If you want to use other strategies, that are not supported by Devise, or
   # change the failure app, you can configure them inside the config.warden block.
   #
-  #config.warden do |manager|
-    #manager.intercept_401 = false
-    #manager.strategies.add(:sandstorm, Devise::Strategies::Sandstorm)
-    #manager.default_strategies(scope: :user).unshift :sandstorm
-  #end
+  config.warden do |manager|
+    manager.intercept_401 = false
+    manager.strategies.add(:sandstorm, Devise::Strategies::Sandstorm)
+    manager.default_strategies(scope: :user).unshift :sandstorm
+  end
 
   Gitlab.config.omniauth.providers.each do |provider|
     provider_arguments = []
