@@ -72,8 +72,8 @@ gem "carrierwave"
 gem 'dropzonejs-rails'
 
 # for aws storage
-gem "fog", "~> 1.14"
-gem "unf"
+#gem "fog", "~> 1.14"
+#gem "unf"
 
 # Authorization
 gem "six"
@@ -100,10 +100,10 @@ gem 'asciidoctor', '= 0.1.4'
 gem 'diffy', '~> 3.0.3'
 
 # Application server
-group :unicorn do
-  gem "unicorn", '~> 4.6.3'
-  gem 'unicorn-worker-killer'
-end
+#group :unicorn do
+#  gem "unicorn", '~> 4.6.3'
+#  gem 'unicorn-worker-killer'
+#end
 
 # State machine
 gem "state_machine"
@@ -126,26 +126,26 @@ gem "colored"
 gem 'settingslogic'
 
 # Misc
-gem "foreman"
+#gem "foreman"
 gem 'version_sorter'
 
 # Cache
 gem "redis-rails"
 
 # Campfire integration
-gem 'tinder', '~> 1.9.2'
+#gem 'tinder', '~> 1.9.2'
 
 # HipChat integration
-gem "hipchat", "~> 1.4.0"
+#gem "hipchat", "~> 1.4.0"
 
 # Flowdock integration
-gem "gitlab-flowdock-git-hook", "~> 0.4.2"
+#gem "gitlab-flowdock-git-hook", "~> 0.4.2"
 
 # Gemnasium integration
-gem "gemnasium-gitlab-service", "~> 0.2"
+#gem "gemnasium-gitlab-service", "~> 0.2"
 
 # Slack integration
-gem "slack-notifier", "~> 1.0.0"
+#gem "slack-notifier", "~> 1.0.0"
 
 # d3
 gem "d3_rails", "~> 3.1.4"
@@ -157,7 +157,7 @@ gem "underscore-rails", "~> 1.4.4"
 gem "sanitize", '~> 2.0'
 
 # Protect against bruteforcing
-gem "rack-attack"
+#gem "rack-attack"
 
 # Ace editor
 gem 'ace-rails-ap'
@@ -258,4 +258,4 @@ group :production do
   gem "gitlab_meta", '7.0'
 end
 
-gem "newrelic_rpm"
+#gem "newrelic_rpm"

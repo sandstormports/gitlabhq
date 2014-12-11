@@ -14,6 +14,6 @@ unless File.exist? secret_file
   File.write(secret_file, token)
 end
 
-if File.exist?(Gitlab.config.gitlab_shell.path) && !File.exist?(gitlab_shell_symlink)
-  FileUtils.symlink(secret_file, gitlab_shell_symlink)
-end
+#if File.exist?(Gitlab.config.gitlab_shell.path) && !File.exist?(gitlab_shell_symlink)
+#  FileUtils.symlink(secret_file, gitlab_shell_symlink)
+#end

@@ -1,4 +1,4 @@
-if Gitlab::LDAP::Config.enabled?
+if false#Gitlab::LDAP::Config.enabled?
   module OmniAuth::Strategies
     server = Gitlab.config.ldap.servers.values.first
     klass = server['provider_class']
