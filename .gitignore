@@ -29,11 +29,10 @@ db/data.yml
 vendor/bundle/*
 rails_best_practices_output.html
 doc/code/*
-.secret
 *.log
 public/uploads.*
 public/assets/
 .envrc
 dump.rdb
 tags
-.gitlab_shell_secret
+
