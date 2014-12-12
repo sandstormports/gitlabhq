@@ -301,6 +301,9 @@ production: &base
 development:
   <<: *base
 
+init:
+  <<: *base
+
 test:
   <<: *base
   gravatar:

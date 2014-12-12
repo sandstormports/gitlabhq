@@ -14,4 +14,11 @@ development:
   timeout: 5000
 
 
+init:
+  adapter: sqlite3
+  database: ../initdb.sqlite3
+  pool: 5
+  timeout: 5000
+
+
 
