@@ -126,26 +126,26 @@ gem "colored"
 gem 'settingslogic'
 
 # Misc
-#gem "foreman"
+gem "foreman"
 gem 'version_sorter'
 
 # Cache
 gem "redis-rails"
 
 # Campfire integration
-#gem 'tinder', '~> 1.9.2'
+gem 'tinder', '~> 1.9.2'
 
 # HipChat integration
-#gem "hipchat", "~> 1.4.0"
+gem "hipchat", "~> 1.4.0"
 
 # Flowdock integration
-#gem "gitlab-flowdock-git-hook", "~> 0.4.2"
+gem "gitlab-flowdock-git-hook", "~> 0.4.2"
 
 # Gemnasium integration
-#gem "gemnasium-gitlab-service", "~> 0.2"
+gem "gemnasium-gitlab-service", "~> 0.2"
 
 # Slack integration
-#gem "slack-notifier", "~> 1.0.0"
+gem "slack-notifier", "~> 1.0.0"
 
 # d3
 gem "d3_rails", "~> 3.1.4"
