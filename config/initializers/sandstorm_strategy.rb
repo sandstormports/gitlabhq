@@ -12,6 +12,7 @@ module Devise
           opts[:password] = "xyzzy123!xyzzy"
           opts[:username] = userid
           opts[:email] = userid + "@example.com"
+          opts[:hide_no_ssh_key] = true
           u = User.new(opts)
           u.generate_password
           u.generate_reset_token
