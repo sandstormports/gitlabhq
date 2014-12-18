@@ -7,6 +7,26 @@ class DashboardController < ApplicationController
 
 
   def show
+    if current_user
+      g = Group.where(name: "gitlab").first
+      if !g
+        g = Group.new(name: "gitlab", path:"gitlab")
+        if g.save
+          g.add_owner(current_user)
+        else
+          Rails.logger.error "failed to create gitlab group"
+        end
+      end
+
+      p = Project.where(name: "repo").first
+      if !p
+        p = ::Projects::CreateService.new(current_user, name: "repo", path: "repo", visibility_level: "20", namespace_id: g.id).execute
+      end
+
+      redirect_to project_path(p)
+      return
+    end
+
     # Fetch only 30 projects.
     # If user needs more - point to Dashboard#projects page
     @projects_limit = 30
