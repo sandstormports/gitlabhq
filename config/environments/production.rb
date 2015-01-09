@@ -26,7 +26,7 @@ Gitlab::Application.configure do
   # config.assets.manifest = YOUR_PATH
 
   # See everything in the log (default is :info)
-  config.log_level = :debug
+  config.log_level = :info
 
   # Suppress 'Rendered template ...' messages in the log
   # source: http://stackoverflow.com/a/16369363
