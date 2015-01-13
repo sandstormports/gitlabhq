@@ -2,6 +2,11 @@ require 'sidekiq/web'
 require 'api/api'
 
 Gitlab::Application.routes.draw do
+  use_doorkeeper do
+    controllers :applications => 'oauth/applications',
+                :authorized_applications => 'oauth/authorized_applications',
+                :authorizations => 'oauth/authorizations'
+  end
   #
   # Search
   #
@@ -75,6 +80,7 @@ Gitlab::Application.routes.draw do
   #
   namespace :admin do
     resources :users, constraints: { id: /[a-zA-Z.\/0-9_\-]+/ } do
+      resources :keys, only: [:show, :destroy]
       member do
         put :team_update
         put :block
@@ -103,6 +109,8 @@ Gitlab::Application.routes.draw do
       end
     end
 
+    resource :application_settings, only: [:show, :update]
+
     root to: "dashboard#index"
   end
 
@@ -113,6 +121,7 @@ Gitlab::Application.routes.draw do
     member do
       get :history
       get :design
+      get :applications
 
       put :reset_private_token
       put :update_username
@@ -137,7 +146,8 @@ Gitlab::Application.routes.draw do
     end
   end
 
-  match "/u/:username" => "users#show", as: :user, constraints: { username: /.*/ }, via: :get
+  match "/u/:username" => "users#show", as: :user,
+    constraints: {username: /(?:[^.]|\.(?!atom$))+/, format: /atom/}, via: :get
 
   #
   # Dashboard Area
@@ -185,16 +195,18 @@ Gitlab::Application.routes.draw do
       post :unarchive
       post :upload_image
       post :toggle_star
+      get :markdown_preview
       get :autocomplete_sources
     end
 
     scope module: :projects do
-      resources :blob, only: [:show, :destroy], constraints: { id: /.+/ } do
+      resources :blob, only: [:show, :destroy], constraints: { id: /.+/, format: false } do
         get :diff, on: :member
       end
       resources :raw,       only: [:show], constraints: {id: /.+/}
       resources :tree,      only: [:show], constraints: {id: /.+/, format: /(html|js)/ }
       resources :edit_tree, only: [:show, :update], constraints: { id: /.+/ }, path: 'edit' do
+        # Cannot be GET to differentiate from GET paths that end in preview.
         post :preview, on: :member
       end
       resources :new_tree,  only: [:show, :update], constraints: {id: /.+/}, path: 'new'
@@ -209,7 +221,8 @@ Gitlab::Application.routes.draw do
         end
       end
 
-      match "/compare/:from...:to" => "compare#show", as: "compare", via: [:get, :post], constraints: {from: /.+/, to: /.+/}
+      get '/compare/:from...:to' => 'compare#show', :as => 'compare',
+          :constraints => {from: /.+/, to: /.+/}
 
       resources :snippets, constraints: {id: /\d+/} do
         member do
@@ -253,7 +266,7 @@ Gitlab::Application.routes.draw do
 
       resources :branches, only: [:index, :new, :create, :destroy], constraints: { id: Gitlab::Regex.git_reference_regex }
       resources :tags, only: [:index, :new, :create, :destroy], constraints: { id: Gitlab::Regex.git_reference_regex }
-      resources :protected_branches, only: [:index, :create, :destroy], constraints: { id: Gitlab::Regex.git_reference_regex }
+      resources :protected_branches, only: [:index, :create, :update, :destroy], constraints: { id: Gitlab::Regex.git_reference_regex }
 
       resources :refs, only: [] do
         collection do
@@ -327,10 +340,6 @@ Gitlab::Application.routes.draw do
       resources :notes, only: [:index, :create, :destroy, :update], constraints: {id: /\d+/} do
         member do
           delete :delete_attachment
-        end
-
-        collection do
-          post :preview
         end
       end
     end

@@ -30,10 +30,16 @@ gem "devise-async", '0.9.0'
 #gem 'omniauth-twitter'
 #gem 'omniauth-github'
 #gem 'omniauth-shibboleth'
+#gem 'omniauth-kerberos'
+gem 'doorkeeper', '2.0.1'
+gem "rack-oauth2", "~> 1.0.5"
+
+# Browser detection
+gem "browser"
 
 # Extracting information from a git repository
 # Provide access to Gitlab::Git library
-gem "gitlab_git", '7.0.0.rc12'
+gem "gitlab_git", '7.0.0.rc14'
 
 # Ruby/Rack Git Smart-HTTP Server Handler
 gem 'gitlab-grack', '~> 2.0.0.pre', require: 'grack'
@@ -91,7 +97,7 @@ gem "github-markup"
 gem 'redcarpet', '~> 3.1.2'
 gem 'RedCloth'
 gem 'rdoc', '~>3.6'
-gem 'org-ruby', '= 0.9.9'
+gem 'org-ruby', '= 0.9.12'
 gem 'creole', '~>0.3.6'
 gem 'wikicloth', '=0.8.1'
 gem 'asciidoctor', '= 0.1.4'
@@ -114,7 +120,7 @@ gem "acts-as-taggable-on"
 # Background jobs
 gem 'slim'
 gem 'sinatra', require: nil
-gem 'sidekiq', '2.17.0'
+gem 'sidekiq', '2.17.8'
 
 # HTTP requests
 gem "httparty"
@@ -139,13 +145,13 @@ gem "redis-rails"
 #gem "hipchat", "~> 1.4.0"
 
 # Flowdock integration
-#gem "gitlab-flowdock-git-hook", "~> 0.4.2"
+gem "gitlab-flowdock-git-hook", "~> 0.4.2"
 
 # Gemnasium integration
-#gem "gemnasium-gitlab-service", "~> 0.2"
+gem "gemnasium-gitlab-service", "~> 0.2"
 
 # Slack integration
-#gem "slack-notifier", "~> 1.0.0"
+gem "slack-notifier", "~> 1.0.0"
 
 # d3
 gem "d3_rails", "~> 3.1.4"
@@ -171,7 +177,6 @@ gem 'semantic-ui-sass', '~> 0.16.1.0'
 gem "sass-rails", '~> 4.0.2'
 gem "coffee-rails"
 #gem "uglifier"
-gem "therubyracer"
 gem 'turbolinks'
 gem 'jquery-turbolinks'
 
@@ -256,6 +261,7 @@ end
 
 group :production do
   gem "gitlab_meta", '7.0'
+  gem "therubyracer"
 end
 
 #gem "newrelic_rpm"

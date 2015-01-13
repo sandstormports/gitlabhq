@@ -70,6 +70,16 @@ class MergeRequest < ActiveRecord::Base
       transition locked: :reopened
     end
 
+    after_transition any => :locked do |merge_request, transition|
+      merge_request.locked_at = Time.now
+      merge_request.save
+    end
+
+    after_transition :locked => (any - :locked) do |merge_request, transition|
+      merge_request.locked_at = nil
+      merge_request.save
+    end
+
     state :opened
     state :reopened
     state :closed
@@ -179,7 +189,9 @@ class MergeRequest < ActiveRecord::Base
   end
 
   def automerge!(current_user, commit_message = nil)
-    MergeRequests::AutoMergeService.new.execute(self, current_user, commit_message)
+    MergeRequests::AutoMergeService.
+      new(target_project, current_user).
+      execute(self, commit_message)
   end
 
   def open?
@@ -335,5 +347,9 @@ class MergeRequest < ActiveRecord::Base
     else
       source_project.repository.branch_names
     end
+  end
+
+  def locked_long_ago?
+    locked_at && locked_at < (Time.now - 1.day)
   end
 end

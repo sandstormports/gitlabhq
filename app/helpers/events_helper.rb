@@ -21,15 +21,14 @@ module EventsHelper
 
   def event_filter_link(key, tooltip)
     key = key.to_s
-    inactive = if @event_filter.active? key
-                 nil
-               else
-                 'inactive'
-               end
+    active = if @event_filter.active? key
+               'active'
+             end
 
-    content_tag :div, class: "filter_icon #{inactive}" do
+    content_tag :li, class: "filter_icon #{active}" do
       link_to request.path, class: 'has_tooltip event_filter_link', id: "#{key}_event_filter", 'data-original-title' => tooltip do
-        content_tag :i, nil, class: icon_for_event[key]
+        content_tag(:i, nil, class: icon_for_event[key]) +
+          content_tag(:span, ' ' + tooltip)
       end
     end
   end
@@ -144,5 +143,27 @@ module EventsHelper
     escape_once(truncate(message.split("\n").first, length: 70))
   rescue
     "--broken encoding"
+  end
+
+  def event_to_atom(xml, event)
+    if event.proper?
+      xml.entry do
+        event_link = event_feed_url(event)
+        event_title = event_feed_title(event)
+        event_summary = event_feed_summary(event)
+
+        xml.id      "tag:#{request.host},#{event.created_at.strftime("%Y-%m-%d")}:#{event.id}"
+        xml.link    href: event_link
+        xml.title   truncate(event_title, length: 80)
+        xml.updated event.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+        xml.media   :thumbnail, width: "40", height: "40", url: avatar_icon(event.author_email)
+        xml.author do |author|
+          xml.name event.author_name
+          xml.email event.author_email
+        end
+
+        xml.summary(type: "xhtml") { |x| x << event_summary unless event_summary.nil? }
+      end
+    end
   end
 end
