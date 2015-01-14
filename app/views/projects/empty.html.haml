@@ -1,24 +1,20 @@
 = render "home_panel"
 
 %div.git-empty
-  %fieldset
-    %legend Git global setup
-    %pre.dark
-      :preserve
-        git config --global user.name "#{git_user_name}"
-        git config --global user.email "#{git_user_email}"
-
+  %p
+    This repository is currently empty. Below are some examples for how you might get started, assuming
+    that your endpointUrl is "https://api.sandstorm.example.com".
   %fieldset
     %legend Create a new repository
     %pre.dark
       :preserve
-        mkdir #{@project.path}
-        cd #{@project.path}
+        mkdir new_project
+        cd new_project
         git init
         touch README.md
         git add README.md
         git commit -m "first commit"
-        git remote add origin #{ content_tag(:span, default_url_to_repo, class: 'clone')}
+        git remote add origin https://new_project@api.sandstorm.example.com/gitlab/repo.git
         git push -u origin master
 
   %fieldset
@@ -26,9 +22,6 @@
     %pre.dark
       :preserve
         cd existing_git_repo
-        git remote add origin #{ content_tag(:span, default_url_to_repo, class: 'clone')}
+        git remote add origin https://existing_git_repo@api.sandstorm.example.com/gitlab/repot.git
         git push -u origin master
 
-- if can? current_user, :remove_project, @project
-  .prepend-top-20
-    = link_to 'Remove project', @project, data: { confirm: remove_project_message(@project)}, method: :delete, class: "btn btn-remove pull-right"
