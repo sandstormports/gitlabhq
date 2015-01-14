@@ -5,7 +5,7 @@ task :test do
   Rake::Task["gitlab:test"].invoke
 end
 
-unless (Rails.env.production? || Rails.env.init?)
+unless Rails.env.production?
   require 'coveralls/rake/task'
   Coveralls::RakeTask.new
   desc "GITLAB | Run all tests on CI with simplecov"
