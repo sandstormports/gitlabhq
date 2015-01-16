@@ -25,7 +25,7 @@ gem "sqlite3" # not officially supported
 # Auth
 gem "devise", '3.2.4'
 gem "devise-async", '0.9.0'
-#gem 'omniauth', "~> 1.1.3"
+gem 'omniauth', "~> 1.1.3"
 #gem 'omniauth-google-oauth2'
 #gem 'omniauth-twitter'
 #gem 'omniauth-github'
@@ -45,7 +45,7 @@ gem "gitlab_git", '7.0.0.rc14'
 gem 'gitlab-grack', '~> 2.0.0.pre', require: 'grack'
 
 # LDAP Auth
-gem 'gitlab_omniauth-ldap', '1.2.0', require: "omniauth-ldap"
+#gem 'gitlab_omniauth-ldap', '1.2.0', require: "omniauth-ldap"
 
 # Git Wiki
 gem 'gollum-lib', '~> 3.0.0'
