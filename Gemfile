@@ -132,7 +132,7 @@ gem "httparty"
 gem 'settingslogic'
 
 # Misc
-gem "foreman"
+#gem "foreman"
 gem 'version_sorter'
 
 # Cache
