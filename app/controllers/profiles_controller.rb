@@ -22,13 +22,14 @@ class ProfilesController < ApplicationController
     user_params.except!(:email) if @user.ldap_user?
 
     if @user.update_attributes(user_params)
+      @user.confirm!
       flash[:notice] = "Profile was successfully updated"
     else
       flash[:alert] = "Failed to update profile"
     end
 
     respond_to do |format|
-      format.html { redirect_to :back }
+      format.html {redirect_to "/profile"}
       format.js
     end
   end
