@@ -54,12 +54,12 @@ module Gitlab
     config.assets.version = '1.0'
 
     # Allow access to GitLab API from other domains
-    config.middleware.use Rack::Cors do
-      allow do
-        origins '*'
-        resource '/api/*', headers: :any, methods: [:get, :post, :options, :put, :delete]
-      end
-    end
+    #config.middleware.use Rack::Cors do
+    #  allow do
+    #    origins '*'
+    #    resource '/api/*', headers: :any, methods: [:get, :post, :options, :put, :delete]
+    #  end
+    #end
 
     # Use Redis caching across all environments
     redis_config_file = Rails.root.join('config', 'resque.yml')

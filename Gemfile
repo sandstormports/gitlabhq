@@ -54,9 +54,9 @@ gem 'gollum-lib', '~> 3.0.0'
 gem "gitlab-linguist", "~> 3.0.0", require: "linguist"
 
 # API
-gem "grape", "~> 0.6.1"
-gem "grape-entity", "~> 0.4.2"
-gem 'rack-cors', require: 'rack/cors'
+#gem "grape", "~> 0.6.1"
+#gem "grape-entity", "~> 0.4.2"
+#gem 'rack-cors', require: 'rack/cors'
 
 # Format dates and times
 # based on human-friendly examples
