@@ -1,12 +1,12 @@
 require 'sidekiq/web'
-require 'api/api'
+#require 'api/api'
 
 Gitlab::Application.routes.draw do
-  use_doorkeeper do
-    controllers :applications => 'oauth/applications',
-                :authorized_applications => 'oauth/authorized_applications',
-                :authorizations => 'oauth/authorizations'
-  end
+  #use_doorkeeper do
+  #  controllers :applications => 'oauth/applications',
+  #              :authorized_applications => 'oauth/authorized_applications',
+  #              :authorizations => 'oauth/authorizations'
+  #end
   #
   # Search
   #
@@ -14,8 +14,8 @@ Gitlab::Application.routes.draw do
   get 'search/autocomplete' => "search#autocomplete", as: :search_autocomplete
 
   # API
-  API::API.logger Rails.logger
-  mount API::API => '/api'
+  #API::API.logger Rails.logger
+  #mount API::API => '/api'
 
   # Get all keys of user
   get ':username.keys' => 'profiles/keys#get_keys' , constraints: { username: /.*/ }

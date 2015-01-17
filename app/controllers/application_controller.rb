@@ -171,7 +171,7 @@ class ApplicationController < ActionController::Base
 
   def add_gon_variables
     gon.default_issues_tracker = Project.issues_tracker.default_value
-    gon.api_version = API::API.version
+    gon.api_version = "v3" #API::API.version
     gon.relative_url_root = Gitlab.config.gitlab.relative_url_root
     gon.default_avatar_url = URI::join(Gitlab.config.gitlab.url, ActionController::Base.helpers.image_path('no_avatar.png')).to_s
 

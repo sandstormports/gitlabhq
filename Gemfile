@@ -31,8 +31,8 @@ gem 'omniauth', "~> 1.1.3"
 #gem 'omniauth-github'
 #gem 'omniauth-shibboleth'
 #gem 'omniauth-kerberos'
-gem 'doorkeeper', '2.0.1'
-gem "rack-oauth2", "~> 1.0.5"
+#gem 'doorkeeper', '2.0.1'
+#gem "rack-oauth2", "~> 1.0.5"
 
 # Browser detection
 gem "browser"
