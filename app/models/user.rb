@@ -63,7 +63,7 @@ class User < ActiveRecord::Base
   default_value_for :theme_id, gitlab_config.default_theme
 
   devise :database_authenticatable, :lockable, :async,
-         :recoverable, :rememberable, :trackable, :validatable, :omniauthable, :confirmable, :registerable
+         :recoverable, :rememberable, :trackable, :validatable, :confirmable, :registerable
 
   attr_accessor :force_random_password
 
