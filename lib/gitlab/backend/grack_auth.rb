@@ -83,8 +83,10 @@ module Grack
     end
 
     def authenticate_user(login, password)
-      auth = Gitlab::Auth.new
-      auth.find(login, password)
+      user = Gitlab::Auth.new.find(login, password)
+      return user if user.present?
+
+      nil # No user was found
     end
 
     def authorized_request?
