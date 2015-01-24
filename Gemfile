@@ -261,7 +261,7 @@ end
 
 group :production do
   gem "gitlab_meta", '7.0'
-  gem "therubyracer"
+  #gem "therubyracer"
 end
 
 #gem "newrelic_rpm"
