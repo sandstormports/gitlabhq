@@ -8,7 +8,7 @@ require 'securerandom'
 # no regular words or you'll be exposed to dictionary attacks.
 
 def find_secure_token
-  token_file = '/var/tmp/.secret'
+  token_file = Rails.root.join('.secret')
   if ENV.key?('SECRET_KEY_BASE')
     ENV['SECRET_KEY_BASE']
   elsif File.exist? token_file
