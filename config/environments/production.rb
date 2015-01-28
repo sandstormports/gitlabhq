@@ -25,6 +25,10 @@ Gitlab::Application.configure do
   # Defaults to nil and saved in location specified by config.assets.prefix
   # config.assets.manifest = YOUR_PATH
 
+  config.assets.configure do |env|
+    env.cache = ActiveSupport::Cache::FileStore.new("read-only-cache/assets")
+  end
+
   # See everything in the log (default is :info)
   config.log_level = :info
 
