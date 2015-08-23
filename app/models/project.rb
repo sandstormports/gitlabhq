@@ -320,7 +320,7 @@ class Project < ActiveRecord::Base
   end
 
   def gitlab_ci?
-    gitlab_ci_service && gitlab_ci_service.active
+    return false #gitlab_ci_service && gitlab_ci_service.active
   end
 
   def ci_services
