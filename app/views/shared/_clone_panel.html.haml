@@ -1,11 +1,7 @@
 - project = project || @project
 .git-clone-holder.input-group
-  %p
-    To access this repository from a git client, first
-    generate a webkey by clicking the icon on the Sandstorm top bar.
-    The webkey will be of the form
-    &lt;endpointUrl&gt;#&lt;token&gt;. The repository will then be available at
-    &lt;endpointUrl&gt;/#{project.path_with_namespace}.git,
-    protected by &lt;token&gt; as a password. You can use any username.
-    The token not only provides authorization but also identifies this specific GitLab instance.
+  %p To clone this repo, copy and paste the below commands:
+  %iframe{:id => "webkey-offer", :onload => "sandstormGetWebkey()",
+          :style => "width:600px;height:60px;border: medium 1px;"}
+
 
