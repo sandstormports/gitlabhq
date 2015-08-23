@@ -1,7 +1,7 @@
 - project = project || @project
 .git-clone-holder.input-group
   %p To clone this repo, copy and paste the below commands:
-  %iframe{:id => "webkey-offer", :onload => "sandstormGetWebkey()",
+  %iframe{:id => "webkey-offer", :onload => "sandstormGetWebkey('#{project.path_with_namespace}')",
           :style => "width:600px;height:60px;border: medium 1px;"}
 
 
