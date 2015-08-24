@@ -1,6 +1,7 @@
 class @Diff
   UNFOLD_COUNT = 20
   constructor: ->
+    $(document).off('click', '.js-unfold')
     $(document).on('click', '.js-unfold', (event) =>
       target = $(event.target)
       unfoldBottom = target.hasClass('js-unfold-bottom')
@@ -30,6 +31,10 @@ class @Diff
         bottom: unfoldBottom
         offset: offset
         unfold: unfold
+        # indent is used to compensate for single space indent to fit
+        # '+' and '-' prepended to diff lines,
+        # see https://gitlab.com/gitlab-org/gitlab-ce/issues/707
+        indent: 1
 
       $.get(link, params, (response) =>
         target.parent().replaceWith(response)

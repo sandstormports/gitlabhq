@@ -14,7 +14,7 @@ class Ability
       when "MergeRequest" then merge_request_abilities(user, subject)
       when "Group" then group_abilities(user, subject)
       when "Namespace" then namespace_abilities(user, subject)
-      when "GroupMember" then users_group_abilities(user, subject)
+      when "GroupMember" then group_member_abilities(user, subject)
       else []
       end.concat(global_abilities(user))
     end
@@ -31,17 +31,20 @@ class Ability
                 end
 
       if project && project.public?
-        [
+        rules = [
           :read_project,
           :read_wiki,
           :read_issue,
+          :read_label,
           :read_milestone,
           :read_project_snippet,
-          :read_team_member,
+          :read_project_member,
           :read_merge_request,
           :read_note,
           :download_code
         ]
+
+        rules - project_disabled_features_rules(project)
       else
         group = if subject.kind_of?(Group)
                   subject
@@ -68,40 +71,41 @@ class Ability
     def project_abilities(user, project)
       rules = []
       key = "/user/#{user.id}/project/#{project.id}"
+
       RequestStore.store[key] ||= begin
         team = project.team
 
         # Rules based on role in project
         if team.master?(user)
-          rules += project_master_rules
+          rules.push(*project_master_rules)
 
         elsif team.developer?(user)
-          rules += project_dev_rules
+          rules.push(*project_dev_rules)
 
         elsif team.reporter?(user)
-          rules += project_report_rules
+          rules.push(*project_report_rules)
 
         elsif team.guest?(user)
-          rules += project_guest_rules
+          rules.push(*project_guest_rules)
         end
 
         if project.public? || project.internal?
-          rules += public_project_rules
+          rules.push(*public_project_rules)
         end
 
         if project.owner == user || user.admin?
-          rules += project_admin_rules
+          rules.push(*project_admin_rules)
         end
 
         if project.group && project.group.has_owner?(user)
-          rules += project_admin_rules
+          rules.push(*project_admin_rules)
         end
 
         if project.archived?
           rules -= project_archived_rules
         end
 
-        rules
+        rules - project_disabled_features_rules(project)
       end
     end
 
@@ -117,14 +121,15 @@ class Ability
         :read_project,
         :read_wiki,
         :read_issue,
+        :read_label,
         :read_milestone,
         :read_project_snippet,
-        :read_team_member,
+        :read_project_member,
         :read_merge_request,
         :read_note,
-        :write_project,
-        :write_issue,
-        :write_note
+        :create_project,
+        :create_issue,
+        :create_note
       ]
     end
 
@@ -132,27 +137,28 @@ class Ability
       project_guest_rules + [
         :download_code,
         :fork_project,
-        :write_project_snippet
+        :create_project_snippet,
+        :update_issue,
+        :admin_issue,
+        :admin_label
       ]
     end
 
     def project_dev_rules
       project_report_rules + [
-        :write_merge_request,
-        :write_wiki,
-        :modify_issue,
-        :admin_issue,
-        :admin_label,
+        :admin_merge_request,
+        :create_merge_request,
+        :create_wiki,
         :push_code
       ]
     end
 
     def project_archived_rules
       [
-        :write_merge_request,
+        :create_merge_request,
         :push_code,
         :push_code_to_protected_branches,
-        :modify_merge_request,
+        :update_merge_request,
         :admin_merge_request
       ]
     end
@@ -160,13 +166,11 @@ class Ability
     def project_master_rules
       project_dev_rules + [
         :push_code_to_protected_branches,
-        :modify_issue,
-        :modify_project_snippet,
-        :modify_merge_request,
-        :admin_issue,
+        :update_project_snippet,
+        :update_merge_request,
         :admin_milestone,
         :admin_project_snippet,
-        :admin_team_member,
+        :admin_project_member,
         :admin_merge_request,
         :admin_note,
         :admin_wiki,
@@ -184,6 +188,33 @@ class Ability
       ]
     end
 
+    def project_disabled_features_rules(project)
+      rules = []
+
+      unless project.issues_enabled
+        rules += named_abilities('issue')
+      end
+
+      unless project.merge_requests_enabled
+        rules += named_abilities('merge_request')
+      end
+
+      unless project.issues_enabled or project.merge_requests_enabled
+        rules += named_abilities('label')
+        rules += named_abilities('milestone')
+      end
+
+      unless project.snippets_enabled
+        rules += named_abilities('project_snippet')
+      end
+
+      unless project.wiki_enabled
+        rules += named_abilities('wiki')
+      end
+
+      rules
+    end
+
     def group_abilities(user, group)
       rules = []
 
@@ -193,17 +224,18 @@ class Ability
 
       # Only group masters and group owners can create new projects in group
       if group.has_master?(user) || group.has_owner?(user) || user.admin?
-        rules += [
+        rules.push(*[
           :create_projects,
-        ]
+        ])
       end
 
-      # Only group owner and administrators can manage group
+      # Only group owner and administrators can admin group
       if group.has_owner?(user) || user.admin?
-        rules += [
-          :manage_group,
-          :manage_namespace
-        ]
+        rules.push(*[
+          :admin_group,
+          :admin_namespace,
+          :admin_group_member
+        ])
       end
 
       rules.flatten
@@ -212,54 +244,69 @@ class Ability
     def namespace_abilities(user, namespace)
       rules = []
 
-      # Only namespace owner and administrators can manage it
+      # Only namespace owner and administrators can admin it
       if namespace.owner == user || user.admin?
-        rules += [
+        rules.push(*[
           :create_projects,
-          :manage_namespace
-        ]
+          :admin_namespace
+        ])
       end
 
       rules.flatten
     end
 
-    [:issue, :note, :project_snippet, :personal_snippet, :merge_request].each do |name|
+
+    [:issue, :merge_request].each do |name|
       define_method "#{name}_abilities" do |user, subject|
-        if subject.author == user
-          [
+        rules = []
+
+        if subject.author == user || (subject.respond_to?(:assignee) && subject.assignee == user)
+          rules += [
             :"read_#{name}",
-            :"write_#{name}",
-            :"modify_#{name}",
-            :"admin_#{name}"
+            :"update_#{name}",
           ]
-        elsif subject.respond_to?(:assignee) && subject.assignee == user
-          [
-            :"read_#{name}",
-            :"write_#{name}",
-            :"modify_#{name}",
-          ]
-        else
-          if subject.respond_to?(:project)
-            project_abilities(user, subject.project)
-          else
-            []
-          end
         end
+
+        rules += project_abilities(user, subject.project)
+        rules
       end
     end
 
-    def users_group_abilities(user, subject)
+    [:note, :project_snippet, :personal_snippet].each do |name|
+      define_method "#{name}_abilities" do |user, subject|
+        rules = []
+
+        if subject.author == user
+          rules += [
+            :"read_#{name}",
+            :"update_#{name}",
+            :"admin_#{name}"
+          ]
+        end
+
+        if subject.respond_to?(:project) && subject.project
+          rules += project_abilities(user, subject.project)
+        end
+
+        rules
+      end
+    end
+
+    def group_member_abilities(user, subject)
       rules = []
       target_user = subject.user
       group = subject.group
-      can_manage = group_abilities(user, group).include?(:manage_group)
+      can_manage = group_abilities(user, group).include?(:admin_group_member)
+
       if can_manage && (user != target_user)
-        rules << :modify
-        rules << :destroy
+        rules << :update_group_member
+        rules << :destroy_group_member
       end
+
       if !group.last_owner?(user) && (can_manage || (user == target_user))
-        rules << :destroy
+        rules << :destroy_group_member
       end
+
       rules
     end
 
@@ -269,6 +316,17 @@ class Ability
                        abilities << self
                        abilities
                      end
+    end
+
+    private
+
+    def named_abilities(name)
+      [
+        :"read_#{name}",
+        :"create_#{name}",
+        :"update_#{name}",
+        :"admin_#{name}"
+      ]
     end
   end
 end

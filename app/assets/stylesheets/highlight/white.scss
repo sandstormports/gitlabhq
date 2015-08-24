@@ -1,5 +1,9 @@
 /* https://github.com/aahan/pygments-github-style */
+pre.code.highlight.white,
 .code.white {
+
+  background-color: #fff;
+  color: #333;
 
   pre.highlight,
   .line-numbers,
@@ -10,6 +14,11 @@
 
   pre.code {
     border-left: 1px solid #bbb;
+  }
+
+  // highlight line via anchor
+  pre .hll {
+    background-color: #f8eec7 !important;
   }
 
   .hll { background-color: #f8f8f8 }

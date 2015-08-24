@@ -21,11 +21,11 @@ describe ForkedProjectLink, "add link on fork" do
   end
 
   it "project_to should know it is forked" do
-    @project_to.forked?.should be_true
+    expect(@project_to.forked?).to be_truthy
   end
 
   it "project should know who it is forked from" do
-    @project_to.forked_from_project.should == project_from
+    expect(@project_to.forked_from_project).to eq(project_from)
   end
 end
 
@@ -43,25 +43,25 @@ describe :forked_from_project do
 
 
   it "project_to should know it is forked" do
-    project_to.forked?.should be_true
+    expect(project_to.forked?).to be_truthy
   end
 
   it "project_from should not be forked" do
-    project_from.forked?.should be_false
+    expect(project_from.forked?).to be_falsey
   end
 
   it "project_to.destroy should destroy fork_link" do
-    forked_project_link.should_receive(:destroy)
+    expect(forked_project_link).to receive(:destroy)
     project_to.destroy
   end
 
 end
 
 def fork_project(from_project, user)
-  context = Projects::ForkService.new(from_project, user)
-  shell = double("gitlab_shell")
-  shell.stub(fork_repository: true)
-  context.stub(gitlab_shell: shell)
-  context.execute
-end
+  shell = double('gitlab_shell', fork_repository: true)
 
+  service = Projects::ForkService.new(from_project, user)
+  allow(service).to receive(:gitlab_shell).and_return(shell)
+
+  service.execute
+end

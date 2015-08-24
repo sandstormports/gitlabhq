@@ -5,31 +5,31 @@ describe NotificationsHelper do
     let(:notification) { double(disabled?: false, participating?: false, watch?: false) }
 
     context "disabled notification" do
-      before { notification.stub(disabled?: true) }
+      before { allow(notification).to receive(:disabled?).and_return(true) }
 
       it "has a red icon" do
-        notification_icon(notification).should match('class="fa fa-volume-off ns-mute"')
+        expect(notification_icon(notification)).to match('class="fa fa-volume-off ns-mute"')
       end
     end
 
     context "participating notification" do
-      before { notification.stub(participating?: true) }
+      before { allow(notification).to receive(:participating?).and_return(true) }
 
       it "has a blue icon" do
-        notification_icon(notification).should match('class="fa fa-volume-down ns-part"')
+        expect(notification_icon(notification)).to match('class="fa fa-volume-down ns-part"')
       end
     end
 
     context "watched notification" do
-      before { notification.stub(watch?: true) }
+      before { allow(notification).to receive(:watch?).and_return(true) }
 
       it "has a green icon" do
-        notification_icon(notification).should match('class="fa fa-volume-up ns-watch"')
+        expect(notification_icon(notification)).to match('class="fa fa-volume-up ns-watch"')
       end
     end
 
     it "has a blue icon" do
-      notification_icon(notification).should match('class="fa fa-circle-o ns-default"')
+      expect(notification_icon(notification)).to match('class="fa fa-circle-o ns-default"')
     end
   end
 end

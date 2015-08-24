@@ -32,9 +32,9 @@
         %span.light.pull-right
           = Milestone.count
       %p
-        Active users last 30 days
+        Active Users
         %span.light.pull-right
-          = User.where("current_sign_in_at > ?", 30.days.ago).count
+          = User.active.count
     .col-md-4
       %h4
         Features
@@ -55,8 +55,17 @@
         OmniAuth
         %span.light.pull-right
           = boolean_to_icon Gitlab.config.omniauth.enabled
+      %p
+        Reply by email
+        %span.light.pull-right
+          = boolean_to_icon Gitlab::ReplyByEmail.enabled?
     .col-md-4
-      %h4 Components
+      %h4
+        Components
+        - if current_application_settings.version_check_enabled
+          .pull-right
+            = version_status_badge
+
       %hr
       %p
         GitLab
@@ -85,10 +94,10 @@
       .light-well
         %h4 Projects
         .data
-          = link_to admin_projects_path do
+          = link_to admin_namespaces_projects_path do
             %h1= Project.count
           %hr
-          = link_to 'New Project', new_project_path, class: "btn btn-new"
+          = link_to('New Project', new_project_path, class: "btn btn-new")
     .col-sm-4
       .light-well
         %h4 Users
@@ -112,7 +121,7 @@
       %hr
       - @projects.each do |project|
         %p
-          = link_to project.name_with_namespace, [:admin, project], class: 'str-truncated'
+          = link_to project.name_with_namespace, [:admin, project.namespace.becomes(Namespace), project], class: 'str-truncated'
           %span.light.pull-right
             #{time_ago_with_tooltip(project.created_at)}
 

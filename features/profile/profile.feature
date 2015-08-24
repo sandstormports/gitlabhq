@@ -35,6 +35,7 @@ Feature: Profile
     Then I change my avatar
     And I should see new avatar
     And I should see the "Remove avatar" button
+    And I should see the gravatar host link
 
   Scenario: I remove my avatar
     Given I visit profile page
@@ -42,6 +43,7 @@ Feature: Profile
     When I remove my avatar
     Then I should see my gravatar
     And I should not see the "Remove avatar" button
+    And I should see the gravatar host link
 
   Scenario: My password is expired
     Given my password is expired
@@ -63,7 +65,7 @@ Feature: Profile
 
   Scenario: I visit history tab
     Given I have activity
-    When I visit profile history page
+    When I visit Audit Log page
     Then I should see my activity
 
   Scenario: I visit my user page
@@ -84,16 +86,3 @@ Feature: Profile
     Then I visit profile applications page
     And I click to remove application
     Then I see that application is removed
-
-  @javascript
-  Scenario: I change my application theme
-    Given I visit profile design page
-    When I change my application theme
-    Then I should see the theme change immediately
-    And I should receive feedback that the changes were saved
-
-  @javascript
-  Scenario: I change my code preview theme
-    Given I visit profile design page
-    When I change my code preview theme
-    Then I should receive feedback that the changes were saved

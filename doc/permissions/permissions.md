@@ -6,6 +6,9 @@ If a user is both in a project group and in the project itself, the highest perm
 
 If a user is a GitLab administrator they receive all permissions.
 
+To add or import a user, you can follow the [project users and members
+documentation](doc/workflow/add-user/add-user.md).
+
 ## Project
 
 | Action                                | Guest   | Reporter   | Developer   | Master   | Owner  |
@@ -15,6 +18,9 @@ If a user is a GitLab administrator they receive all permissions.
 | Pull project code                     |         | ✓          | ✓           | ✓        | ✓      |
 | Download project                      |         | ✓          | ✓           | ✓        | ✓      |
 | Create code snippets                  |         | ✓          | ✓           | ✓        | ✓      |
+| Manage issue tracker                  |         | ✓          | ✓           | ✓        | ✓      |
+| Manage labels                         |         | ✓          | ✓           | ✓        | ✓      |
+| Manage merge requests                 |         |            | ✓           | ✓        | ✓      |
 | Create new merge request              |         |            | ✓           | ✓        | ✓      |
 | Create new branches                   |         |            | ✓           | ✓        | ✓      |
 | Push to non-protected branches        |         |            | ✓           | ✓        | ✓      |
@@ -22,8 +28,6 @@ If a user is a GitLab administrator they receive all permissions.
 | Remove non-protected branches         |         |            | ✓           | ✓        | ✓      |
 | Add tags                              |         |            | ✓           | ✓        | ✓      |
 | Write a wiki                          |         |            | ✓           | ✓        | ✓      |
-| Manage issue tracker                  |         |            | ✓           | ✓        | ✓      |
-| Manage labels                         |         |            | ✓           | ✓        | ✓      |
 | Create new milestones                 |         |            |             | ✓        | ✓      |
 | Add new team members                  |         |            |             | ✓        | ✓      |
 | Push to protected branches            |         |            |             | ✓        | ✓      |
@@ -41,6 +45,11 @@ If a user is a GitLab administrator they receive all permissions.
 
 ## Group
 
+In order for a group to appear as public and be browsable, it must contain at
+least one public project.
+
+Any user can remove themselves from a group, unless they are the last Owner of the group.
+
 | Action                  | Guest | Reporter | Developer | Master | Owner |
 |-------------------------|-------|----------|-----------|--------|-------|
 | Browse group            | ✓     | ✓        | ✓         | ✓      | ✓     |
@@ -48,5 +57,3 @@ If a user is a GitLab administrator they receive all permissions.
 | Create project in group |       |          |           | ✓      | ✓     |
 | Manage group members    |       |          |           |        | ✓     |
 | Remove group            |       |          |           |        | ✓     |
-
-Any user can remove themselves from a group, unless they are the last Owner of the group.

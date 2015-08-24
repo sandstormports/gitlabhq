@@ -1,5 +1,9 @@
 /* https://gist.github.com/qguv/7936275 */
+pre.code.highlight.solarized-dark,
 .code.solarized-dark {
+
+  background-color: #002b36;
+  color: #93a1a1;
 
   pre.code,
   .line-numbers,
@@ -10,6 +14,11 @@
 
   pre.code {
     border-left: 1px solid #113b46;
+  }
+
+  // highlight line via anchor
+  pre .hll {
+    background-color: #174652 !important;
   }
 
   /* Solarized Dark

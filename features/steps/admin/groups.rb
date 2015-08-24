@@ -28,48 +28,63 @@ class Spinach::Features::AdminGroups < Spinach::FeatureSteps
   end
 
   step 'I should see newly created group' do
-    page.should have_content "Group: gitlab"
-    page.should have_content "Group description"
+    expect(page).to have_content "Group: gitlab"
+    expect(page).to have_content "Group description"
   end
 
   step 'I should be redirected to group page' do
-    current_path.should == admin_group_path(Group.last)
+    expect(current_path).to eq admin_group_path(Group.find_by(path: 'gitlab'))
   end
 
   When 'I select user "John Doe" from user list as "Reporter"' do
     select2(user_john.id, from: "#user_ids", multiple: true)
-    within "#new_team_member" do
+    page.within "#new_project_member" do
       select "Reporter", from: "access_level"
     end
-    click_button "Add users into group"
+    click_button "Add users to group"
+  end
+
+  When 'I select user "johndoe@gitlab.com" from user list as "Reporter"' do
+    select2('johndoe@gitlab.com', from: "#user_ids", multiple: true)
+    page.within "#new_project_member" do
+      select "Reporter", from: "access_level"
+    end
+    click_button "Add users to group"
   end
 
   step 'I should see "John Doe" in team list in every project as "Reporter"' do
-    within ".group-users-list" do
-      page.should have_content "John Doe"
-      page.should have_content "Reporter"
+    page.within ".group-users-list" do
+      expect(page).to have_content "John Doe"
+      expect(page).to have_content "Reporter"
+    end
+  end
+
+  step 'I should see "johndoe@gitlab.com" in team list in every project as "Reporter"' do
+    page.within ".group-users-list" do
+      expect(page).to have_content "johndoe@gitlab.com (invited)"
+      expect(page).to have_content "Reporter"
     end
   end
 
   step 'I should be all groups' do
     Group.all.each do |group|
-      page.should have_content group.name
+      expect(page).to have_content group.name
     end
   end
 
   step 'we have user "John Doe" in group' do
-    current_group.add_user(user_john, Gitlab::Access::REPORTER)
+    current_group.add_reporter(user_john)
   end
 
   step 'I remove user "John Doe" from group' do
-    within "#user_#{user_john.id}" do
+    page.within "#user_#{user_john.id}" do
       click_link 'Remove user from group'
     end
   end
 
   step 'I should not see "John Doe" in team list' do
-    within ".group-users-list" do
-      page.should_not have_content "John Doe"
+    page.within ".group-users-list" do
+      expect(page).not_to have_content "John Doe"
     end
   end
 

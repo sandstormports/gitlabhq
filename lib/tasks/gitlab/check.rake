@@ -1,19 +1,20 @@
 namespace :gitlab do
-  desc "GITLAB | Check the configuration of GitLab and its environment"
-  task check: %w{gitlab:env:check
-                 gitlab:gitlab_shell:check
+  desc "GitLab | Check the configuration of GitLab and its environment"
+  task check: %w{gitlab:gitlab_shell:check
                  gitlab:sidekiq:check
+                 gitlab:reply_by_email:check
                  gitlab:ldap:check
                  gitlab:app:check}
 
 
 
   namespace :app do
-    desc "GITLAB | Check the configuration of the GitLab Rails app"
+    desc "GitLab | Check the configuration of the GitLab Rails app"
     task check: :environment  do
       warn_user_is_not_gitlab
       start_checking "GitLab"
 
+      check_git_config
       check_database_config_exists
       check_database_is_not_sqlite
       check_migrations_are_up
@@ -22,13 +23,14 @@ namespace :gitlab do
       check_gitlab_config_not_outdated
       check_log_writable
       check_tmp_writable
+      check_uploads
       check_init_script_exists
       check_init_script_up_to_date
       check_projects_have_namespace
-      check_satellites_exist
       check_redis_version
       check_ruby_version
       check_git_version
+      check_active_users
 
       finished_checking "GitLab"
     end
@@ -36,6 +38,36 @@ namespace :gitlab do
 
     # Checks
     ########################
+
+    def check_git_config
+      print "Git configured with autocrlf=input? ... "
+
+      options = {
+        "core.autocrlf" => "input"
+      }
+
+      correct_options = options.map do |name, value|
+        run(%W(#{Gitlab.config.git.bin_path} config --global --get #{name})).try(:squish) == value
+      end
+
+      if correct_options.all?
+        puts "yes".green
+      else
+        print "Trying to fix Git error automatically. ..."
+
+        if auto_fix_git_config(options)
+          puts "Success".green
+        else
+          puts "Failed".red
+          try_fixing_it(
+            sudo_gitlab("\"#{Gitlab.config.git.bin_path}\" config --global core.autocrlf \"#{options["core.autocrlf"]}\"")
+          )
+          for_more_information(
+            see_installation_guide_section "GitLab"
+          )
+       end
+      end
+    end
 
     def check_database_config_exists
       print "Database config exists? ... "
@@ -207,37 +239,6 @@ namespace :gitlab do
       end
     end
 
-    def check_satellites_exist
-      print "Projects have satellites? ... "
-
-      unless Project.count > 0
-        puts "can't check, you have no projects".magenta
-        return
-      end
-      puts ""
-
-      Project.find_each(batch_size: 100) do |project|
-        print sanitized_message(project)
-
-        if project.satellite.exists?
-          puts "yes".green
-        elsif project.empty_repo?
-          puts "can't create, repository is empty".magenta
-        else
-          puts "no".red
-          try_fixing_it(
-            sudo_gitlab("bundle exec rake gitlab:satellites:create RAILS_ENV=production"),
-            "If necessary, remove the tmp/repo_satellites directory ...",
-            "... and rerun the above command"
-          )
-          for_more_information(
-            "doc/raketasks/maintenance.md "
-          )
-          fix_and_rerun
-        end
-      end
-    end
-
     def check_log_writable
       print "Log directory writable? ... "
 
@@ -277,11 +278,63 @@ namespace :gitlab do
         fix_and_rerun
       end
     end
+    
+    def check_uploads
+      print "Uploads directory setup correctly? ... "
+
+      unless File.directory?(Rails.root.join('public/uploads'))
+        puts "no".red
+        try_fixing_it(
+          "sudo -u #{gitlab_user} mkdir -m 750 #{Rails.root}/public/uploads"
+        )
+        for_more_information(
+          see_installation_guide_section "GitLab"
+        )
+        fix_and_rerun
+        return
+      end
+
+      upload_path = File.realpath(Rails.root.join('public/uploads'))
+      upload_path_tmp = File.join(upload_path, 'tmp')
+
+      if File.stat(upload_path).mode == 040750
+        unless Dir.exists?(upload_path_tmp)
+          puts 'skipped (no tmp uploads folder yet)'.magenta
+          return
+        end
+
+        # if tmp upload dir has incorrect permissions, assume others do as well
+        if File.stat(upload_path_tmp).mode == 040755 && File.owned?(upload_path_tmp) # verify drwxr-xr-x permissions
+          puts "yes".green
+        else
+          puts "no".red
+          try_fixing_it(
+            "sudo chown -R #{gitlab_user} #{upload_path}",
+            "sudo find #{upload_path} -type f -exec chmod 0644 {} \\;",
+            "sudo find #{upload_path} -type d -not -path #{upload_path} -exec chmod 0755 {} \\;"
+          )
+          for_more_information(
+            see_installation_guide_section "GitLab"
+          )
+          fix_and_rerun
+        end
+      else
+        puts "no".red
+        try_fixing_it(
+          "sudo chmod 0750 #{upload_path}",
+        )
+        for_more_information(
+          see_installation_guide_section "GitLab"
+        )
+        fix_and_rerun
+      end
+    end
 
     def check_redis_version
       print "Redis version >= 2.0.0? ... "
 
-      if run_and_match(%W(redis-cli --version), /redis-cli 2.\d.\d/)
+      redis_version = run(%W(redis-cli --version))
+      if redis_version.try(:match, /redis-cli 2.\d.\d/) || redis_version.try(:match, /redis-cli 3.\d.\d/)
         puts "yes".green
       else
         puts "no".red
@@ -296,56 +349,8 @@ namespace :gitlab do
     end
   end
 
-
-
-  namespace :env do
-    desc "GITLAB | Check the configuration of the environment"
-    task check: :environment  do
-      warn_user_is_not_gitlab
-      start_checking "Environment"
-
-      check_gitlab_git_config
-
-      finished_checking "Environment"
-    end
-
-
-    # Checks
-    ########################
-
-    def check_gitlab_git_config
-      print "Git configured for #{gitlab_user} user? ... "
-
-      options = {
-        "user.name"  => "GitLab",
-        "user.email" => Gitlab.config.gitlab.email_from,
-        "core.autocrlf" => "input"
-      }
-      correct_options = options.map do |name, value|
-        run(%W(#{Gitlab.config.git.bin_path} config --global --get #{name})).try(:squish) == value
-      end
-
-      if correct_options.all?
-        puts "yes".green
-      else
-        puts "no".red
-        try_fixing_it(
-          sudo_gitlab("\"#{Gitlab.config.git.bin_path}\" config --global user.name  \"#{options["user.name"]}\""),
-          sudo_gitlab("\"#{Gitlab.config.git.bin_path}\" config --global user.email \"#{options["user.email"]}\""),
-          sudo_gitlab("\"#{Gitlab.config.git.bin_path}\" config --global core.autocrlf \"#{options["core.autocrlf"]}\"")
-        )
-        for_more_information(
-          see_installation_guide_section "GitLab"
-        )
-        fix_and_rerun
-      end
-    end
-  end
-
-
-
   namespace :gitlab_shell do
-    desc "GITLAB | Check the configuration of GitLab Shell"
+    desc "GitLab | Check the configuration of GitLab Shell"
     task check: :environment  do
       warn_user_is_not_gitlab
       start_checking "GitLab Shell"
@@ -355,7 +360,6 @@ namespace :gitlab do
       check_repo_base_is_not_symlink
       check_repo_base_user_and_group
       check_repo_base_permissions
-      check_satellites_permissions
       check_repos_hooks_directory_is_link
       check_gitlab_shell_self_test
 
@@ -433,29 +437,6 @@ namespace :gitlab do
       end
     end
 
-    def check_satellites_permissions
-      print "Satellites access is drwxr-x---? ... "
-
-      satellites_path = Gitlab.config.satellites.path
-      unless File.exists?(satellites_path)
-        puts "can't check because of previous errors".magenta
-        return
-      end
-
-      if File.stat(satellites_path).mode.to_s(8).ends_with?("0750")
-        puts "yes".green
-      else
-        puts "no".red
-        try_fixing_it(
-          "sudo chmod u+rwx,g=rx,o-rwx #{satellites_path}",
-        )
-        for_more_information(
-          see_installation_guide_section "GitLab"
-        )
-        fix_and_rerun
-      end
-    end
-
     def check_repo_base_user_and_group
       gitlab_shell_ssh_user = Gitlab.config.gitlab_shell.ssh_user
       gitlab_shell_owner_group = Gitlab.config.gitlab_shell.owner_group
@@ -501,7 +482,8 @@ namespace :gitlab do
 
         if project.empty_repo?
           puts "repository is empty".magenta
-        elsif File.realpath(project_hook_directory) == File.realpath(gitlab_shell_hooks_path)
+        elsif File.directory?(project_hook_directory) && File.directory?(gitlab_shell_hooks_path) &&
+            (File.realpath(project_hook_directory) == File.realpath(gitlab_shell_hooks_path))
           puts 'ok'.green
         else
           puts "wrong or missing hooks".red
@@ -590,7 +572,7 @@ namespace :gitlab do
 
 
   namespace :sidekiq do
-    desc "GITLAB | Check the configuration of Sidekiq"
+    desc "GitLab | Check the configuration of Sidekiq"
     task check: :environment  do
       warn_user_is_not_gitlab
       start_checking "Sidekiq"
@@ -648,6 +630,174 @@ namespace :gitlab do
     end
   end
 
+
+  namespace :reply_by_email do
+    desc "GitLab | Check the configuration of Reply by email"
+    task check: :environment  do
+      warn_user_is_not_gitlab
+      start_checking "Reply by email"
+
+      if Gitlab.config.reply_by_email.enabled
+        check_address_formatted_correctly
+        check_mail_room_config_exists
+        check_imap_authentication
+
+        if Rails.env.production?
+          check_initd_configured_correctly
+          check_mail_room_running
+        else
+          check_foreman_configured_correctly
+        end
+      else
+        puts 'Reply by email is disabled in config/gitlab.yml'
+      end
+
+      finished_checking "Reply by email"
+    end
+
+
+    # Checks
+    ########################
+
+    def check_address_formatted_correctly
+      print "Address formatted correctly? ... "
+
+      if Gitlab::ReplyByEmail.address_formatted_correctly?
+        puts "yes".green
+      else
+        puts "no".red
+        try_fixing_it(
+          "Make sure that the address in config/gitlab.yml includes the '%{reply_key}' placeholder."
+        )
+        fix_and_rerun
+      end
+    end
+
+    def check_initd_configured_correctly
+      print "Init.d configured correctly? ... "
+
+      path = "/etc/default/gitlab"
+
+      if File.exist?(path) && File.read(path).include?("mail_room_enabled=true")
+        puts "yes".green
+      else
+        puts "no".red
+        try_fixing_it(
+          "Enable mail_room in the init.d configuration."
+        )
+        for_more_information(
+          "doc/reply_by_email/README.md"
+        )
+        fix_and_rerun
+      end
+    end
+
+    def check_foreman_configured_correctly
+      print "Foreman configured correctly? ... "
+
+      path = Rails.root.join("Procfile")
+
+      if File.exist?(path) && File.read(path) =~ /^mail_room:/
+        puts "yes".green
+      else
+        puts "no".red
+        try_fixing_it(
+          "Enable mail_room in your Procfile."
+        )
+        for_more_information(
+          "doc/reply_by_email/README.md"
+        )
+        fix_and_rerun
+      end
+    end
+
+    def check_mail_room_running
+      print "MailRoom running? ... "
+
+      path = "/etc/default/gitlab"
+
+      unless File.exist?(path) && File.read(path).include?("mail_room_enabled=true")
+        puts "can't check because of previous errors".magenta
+        return
+      end
+
+      if mail_room_running?
+        puts "yes".green
+      else
+        puts "no".red
+        try_fixing_it(
+          sudo_gitlab("RAILS_ENV=production bin/mail_room start")
+        )
+        for_more_information(
+          see_installation_guide_section("Install Init Script"),
+          "see log/mail_room.log for possible errors"
+        )
+        fix_and_rerun
+      end
+    end
+
+    def check_mail_room_config_exists
+      print "MailRoom config exists? ... "
+
+      mail_room_config_file = Rails.root.join("config", "mail_room.yml")
+
+      if File.exists?(mail_room_config_file)
+        puts "yes".green
+      else
+        puts "no".red
+        try_fixing_it(
+          "Copy config/mail_room.yml.example to config/mail_room.yml",
+          "Check that the information in config/mail_room.yml is correct"
+        )
+        for_more_information(
+          "doc/reply_by_email/README.md"
+        )
+        fix_and_rerun
+      end
+    end
+
+    def check_imap_authentication
+      print "IMAP server credentials are correct? ... "
+
+      mail_room_config_file = Rails.root.join("config", "mail_room.yml")
+
+      unless File.exists?(mail_room_config_file)
+        puts "can't check because of previous errors".magenta
+        return
+      end
+
+      config = YAML.load_file(mail_room_config_file)[:mailboxes].first rescue nil
+
+      if config
+        begin
+          imap = Net::IMAP.new(config[:host], port: config[:port], ssl: config[:ssl])
+          imap.login(config[:email], config[:password])
+          connected = true
+        rescue
+          connected = false
+        end
+      end
+
+      if connected
+        puts "yes".green
+      else
+        puts "no".red
+        try_fixing_it(
+          "Check that the information in config/mail_room.yml is correct"
+        )
+        for_more_information(
+          "doc/reply_by_email/README.md"
+        )
+        fix_and_rerun
+      end
+    end
+
+    def mail_room_running?
+      ps_ux, _ = Gitlab::Popen.popen(%W(ps ux))
+      ps_ux.include?("mail_room")
+    end
+  end
+
   namespace :ldap do
     task :check, [:limit] => :environment do |t, args|
       # Only show up to 100 results because LDAP directories can be very big.
@@ -677,6 +827,23 @@ namespace :gitlab do
           users.each do |user|
             puts "\tDN: #{user.dn}\t #{adapter.config.uid}: #{user.uid}"
           end
+        end
+      end
+    end
+  end
+
+  namespace :repo do
+    desc "GitLab | Check the integrity of the repositories managed by GitLab"
+    task check: :environment do
+      namespace_dirs = Dir.glob(
+        File.join(Gitlab.config.gitlab_shell.repos_path, '*')
+      )
+
+      namespace_dirs.each do |namespace_dir|
+        repo_dirs = Dir.glob(File.join(namespace_dir, '*'))
+        repo_dirs.each do |dir|
+          puts "\nChecking repo at #{dir}"
+          system(*%w(git fsck), chdir: dir)
         end
       end
     end
@@ -747,13 +914,13 @@ namespace :gitlab do
   end
 
   def check_ruby_version
-    required_version = Gitlab::VersionInfo.new(2, 0, 0)
+    required_version = Gitlab::VersionInfo.new(2, 1, 0)
     current_version = Gitlab::VersionInfo.parse(run(%W(ruby --version)))
 
     print "Ruby version >= #{required_version} ? ... "
 
     if current_version.valid? && required_version <= current_version
-        puts "yes (#{current_version})".green
+      puts "yes (#{current_version})".green
     else
       puts "no".red
       try_fixing_it(
@@ -771,7 +938,7 @@ namespace :gitlab do
     print "Git version >= #{required_version} ? ... "
 
     if current_version.valid? && required_version <= current_version
-        puts "yes (#{current_version})".green
+      puts "yes (#{current_version})".green
     else
       puts "no".red
       try_fixing_it(
@@ -779,6 +946,10 @@ namespace :gitlab do
       )
       fix_and_rerun
     end
+  end
+
+  def check_active_users
+    puts "Active users: #{User.active.count}"
   end
 
   def omnibus_gitlab?

@@ -1,6 +1,7 @@
 class Spinach::Features::DashboardMergeRequests < Spinach::FeatureSteps
   include SharedAuthentication
   include SharedPaths
+  include Select2Helper
 
   step 'I should see merge requests assigned to me' do
     should_see(assigned_merge_request)
@@ -39,29 +40,21 @@ class Spinach::Features::DashboardMergeRequests < Spinach::FeatureSteps
   end
 
   step 'I click "Authored by me" link' do
-    within ".assignee-filter" do
-      click_link "Any"
-    end
-    within ".author-filter" do
-      click_link current_user.name
-    end
+    select2(current_user.id, from: "#author_id")
+    select2(nil, from: "#assignee_id")
   end
 
   step 'I click "All" link' do
-    within ".author-filter" do
-      click_link "Any"
-    end
-    within ".assignee-filter" do
-      click_link "Any"
-    end
+    select2(nil, from: "#author_id")
+    select2(nil, from: "#assignee_id")
   end
 
   def should_see(merge_request)
-    page.should have_content(merge_request.title[0..10])
+    expect(page).to have_content(merge_request.title[0..10])
   end
 
   def should_not_see(merge_request)
-    page.should_not have_content(merge_request.title[0..10])
+    expect(page).not_to have_content(merge_request.title[0..10])
   end
 
   def assigned_merge_request
@@ -73,7 +66,7 @@ class Spinach::Features::DashboardMergeRequests < Spinach::FeatureSteps
 
   def authored_merge_request
     @authored_merge_request ||= create :merge_request,
-                                  source_branch: 'simple_merge_request',
+                                  source_branch: 'markdown',
                                   author: current_user,
                                   target_project: project,
                                   source_project: project
@@ -81,14 +74,14 @@ class Spinach::Features::DashboardMergeRequests < Spinach::FeatureSteps
 
   def other_merge_request
     @other_merge_request ||= create :merge_request,
-                              source_branch: '2_3_notes_fix',
+                              source_branch: 'fix',
                               target_project: project,
                               source_project: project
   end
 
   def authored_merge_request_from_fork
     @authored_merge_request_from_fork ||= create :merge_request,
-                                            source_branch: 'basic_page',
+                                            source_branch: 'feature_conflict',
                                             author: current_user,
                                             target_project: public_project,
                                             source_project: forked_project
@@ -96,7 +89,7 @@ class Spinach::Features::DashboardMergeRequests < Spinach::FeatureSteps
 
   def assigned_merge_request_from_fork
     @assigned_merge_request_from_fork ||= create :merge_request,
-                                            source_branch: 'basic_page_fix',
+                                            source_branch: 'markdown',
                                             assignee: current_user,
                                             target_project: public_project,
                                             source_project: forked_project

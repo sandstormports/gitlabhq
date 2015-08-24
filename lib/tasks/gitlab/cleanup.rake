@@ -1,6 +1,6 @@
 namespace :gitlab do
   namespace :cleanup do
-    desc "GITLAB | Cleanup | Clean namespaces"
+    desc "GitLab | Cleanup | Clean namespaces"
     task dirs: :environment  do
       warn_user_is_not_gitlab
       remove_flag = ENV['REMOVE']
@@ -43,7 +43,7 @@ namespace :gitlab do
       end
     end
 
-    desc "GITLAB | Cleanup | Clean repositories"
+    desc "GitLab | Cleanup | Clean repositories"
     task repos: :environment  do
       warn_user_is_not_gitlab
       remove_flag = ENV['REMOVE']
@@ -51,7 +51,7 @@ namespace :gitlab do
       git_base_path = Gitlab.config.gitlab_shell.repos_path
       all_dirs = Dir.glob(git_base_path + '/*')
 
-      global_projects = Project.where(namespace_id: nil).pluck(:path)
+      global_projects = Project.in_namespace(nil).pluck(:path)
 
       puts git_base_path.yellow
       puts "Looking for global repos to remove... "
@@ -85,18 +85,19 @@ namespace :gitlab do
       end
     end
 
-    desc "GITLAB | Cleanup | Block users that have been removed in LDAP"
+    desc "GitLab | Cleanup | Block users that have been removed in LDAP"
     task block_removed_ldap_users: :environment  do
       warn_user_is_not_gitlab
       block_flag = ENV['BLOCK']
 
-      User.ldap.each do |ldap_user|
-        print "#{ldap_user.name} (#{ldap_user.extern_uid}) ..."
-        if Gitlab::LDAP::Access.allowed?(ldap_user)
+      User.find_each do |user|
+        next unless user.ldap_user?
+        print "#{user.name} (#{user.ldap_identity.extern_uid}) ..."
+        if Gitlab::LDAP::Access.allowed?(user)
           puts " [OK]".green
         else
           if block_flag
-            ldap_user.block! unless ldap_user.blocked?
+            user.block! unless user.blocked?
             puts " [BLOCKED]".red
           else
             puts " [NOT IN LDAP]".yellow

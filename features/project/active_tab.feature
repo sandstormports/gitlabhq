@@ -35,6 +35,11 @@ Feature: Project Active Tab
     Then the active main tab should be Merge Requests
     And no other main tabs should be active
 
+  Scenario: On Project Members
+    Given I visit my project's members page
+    Then the active main tab should be Members
+    And no other main tabs should be active
+
   Scenario: On Project Wiki
     Given I visit my project's wiki page
     Then the active main tab should be Wiki
@@ -48,13 +53,6 @@ Feature: Project Active Tab
     And no other main tabs should be active
 
   # Sub Tabs: Settings
-
-  Scenario: On Project Settings/Team
-    Given I visit my project's settings page
-    And I click the "Team" tab
-    Then the active sub nav should be Team
-    And no other sub navs should be active
-    And the active main tab should be Settings
 
   Scenario: On Project Settings/Edit
     Given I visit my project's settings page
@@ -106,24 +104,19 @@ Feature: Project Active Tab
     And no other sub tabs should be active
     And the active main tab should be Commits
 
-  # Sub Tabs: Issues
-
   Scenario: On Project Issues/Browse
     Given I visit my project's issues page
-    Then the active sub tab should be Issues
-    And no other sub tabs should be active
-    And the active main tab should be Issues
+    Then the active main tab should be Issues
+    And no other main tabs should be active
 
   Scenario: On Project Issues/Milestones
     Given I visit my project's issues page
     And I click the "Milestones" tab
-    Then the active sub tab should be Milestones
-    And no other sub tabs should be active
-    And the active main tab should be Issues
+    Then the active main tab should be Milestones
+    And no other main tabs should be active
 
   Scenario: On Project Issues/Labels
     Given I visit my project's issues page
     And I click the "Labels" tab
-    Then the active sub tab should be Labels
-    And no other sub tabs should be active
-    And the active main tab should be Issues
+    Then the active main tab should be Labels
+    And no other main tabs should be active

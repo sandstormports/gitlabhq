@@ -1,5 +1,9 @@
 /* https://github.com/MozMorris/tomorrow-pygments */
+pre.code.highlight.dark,
 .code.dark {
+
+  background-color: #1d1f21;
+  color: #c5c8c6;
 
   pre.code,
   .line-numbers,
@@ -12,8 +16,9 @@
     border-left: 1px solid #666;
   }
 
-  pre.hll {
-    background-color: #fff !important;
+  // highlight line via anchor
+  pre .hll {
+    background-color: #557 !important;
   }
 
   .hll { background-color: #373b41 }

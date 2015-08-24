@@ -4,11 +4,11 @@ class Spinach::Features::ProjectCommitsUserLookup < Spinach::FeatureSteps
   include SharedPaths
 
   step 'I click on commit link' do
-    visit project_commit_path(@project, sample_commit.id)
+    visit namespace_project_commit_path(@project.namespace, @project, sample_commit.id)
   end
 
   step 'I click on another commit link' do
-    visit project_commit_path(@project, sample_commit.parent_id)
+    visit namespace_project_commit_path(@project.namespace, @project, sample_commit.parent_id)
   end
 
   step 'I have user with primary email' do
@@ -29,9 +29,9 @@ class Spinach::Features::ProjectCommitsUserLookup < Spinach::FeatureSteps
 
   def check_author_link(email, user)
     author_link = find('.commit-author-link')
-    author_link['href'].should == user_path(user)
-    author_link['data-original-title'].should == email
-    find('.commit-author-name').text.should == user.name
+    expect(author_link['href']).to eq user_path(user)
+    expect(author_link['data-original-title']).to eq email
+    expect(find('.commit-author-name').text).to eq user.name
   end
 
   def user_primary

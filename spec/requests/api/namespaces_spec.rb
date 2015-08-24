@@ -3,6 +3,7 @@ require 'spec_helper'
 describe API::API, api: true  do
   include ApiHelpers
   let(:admin) { create(:admin) }
+  let(:user) { create(:user) }
   let!(:group1) { create(:group) }
   let!(:group2) { create(:group) }
 
@@ -10,17 +11,43 @@ describe API::API, api: true  do
     context "when unauthenticated" do
       it "should return authentication error" do
         get api("/namespaces")
-        response.status.should == 401
+        expect(response.status).to eq(401)
       end
     end
 
-    context "when authenticated as  admin" do
+    context "when authenticated as admin" do
       it "admin: should return an array of all namespaces" do
         get api("/namespaces", admin)
-        response.status.should == 200
-        json_response.should be_an Array
+        expect(response.status).to eq(200)
+        expect(json_response).to be_an Array
 
-        json_response.length.should == Namespace.count
+        expect(json_response.length).to eq(Namespace.count)
+      end
+
+      it "admin: should return an array of matched namespaces" do
+        get api("/namespaces?search=#{group1.name}", admin)
+        expect(response.status).to eq(200)
+        expect(json_response).to be_an Array
+
+        expect(json_response.length).to eq(1)
+      end
+    end
+
+    context "when authenticated as a regular user" do
+      it "user: should return an array of namespaces" do
+        get api("/namespaces", user)
+        expect(response.status).to eq(200)
+        expect(json_response).to be_an Array
+
+        expect(json_response.length).to eq(1)
+      end
+
+      it "admin: should return an array of matched namespaces" do
+        get api("/namespaces?search=#{user.username}", user)
+        expect(response.status).to eq(200)
+        expect(json_response).to be_an Array
+
+        expect(json_response.length).to eq(1)
       end
     end
   end

@@ -13,12 +13,14 @@ describe MergeRequests::RefreshService do
 
       @project = create(:project, namespace: group)
       @fork_project = Projects::ForkService.new(@project, @user).execute
-      @merge_request = create(:merge_request, source_project: @project,
+      @merge_request = create(:merge_request,
+                              source_project: @project,
                               source_branch: 'master',
                               target_branch: 'feature',
                               target_project: @project)
 
-      @fork_merge_request = create(:merge_request, source_project: @fork_project,
+      @fork_merge_request = create(:merge_request,
+                                   source_project: @fork_project,
                                    source_branch: 'master',
                                    target_branch: 'feature',
                                    target_project: @project)
@@ -30,15 +32,22 @@ describe MergeRequests::RefreshService do
     end
 
     context 'push to origin repo source branch' do
+      let(:refresh_service) { service.new(@project, @user) }
       before do
-        service.new(@project, @user).execute(@oldrev, @newrev, 'refs/heads/master')
+        allow(refresh_service).to receive(:execute_hooks)
+        refresh_service.execute(@oldrev, @newrev, 'refs/heads/master')
         reload_mrs
       end
 
-      it { @merge_request.notes.should_not be_empty }
-      it { @merge_request.should be_open }
-      it { @fork_merge_request.should be_open }
-      it { @fork_merge_request.notes.should be_empty }
+      it 'should execute hooks with update action' do
+        expect(refresh_service).to have_received(:execute_hooks).
+          with(@merge_request, 'update')
+      end
+
+      it { expect(@merge_request.notes).not_to be_empty }
+      it { expect(@merge_request).to be_open }
+      it { expect(@fork_merge_request).to be_open }
+      it { expect(@fork_merge_request.notes).to be_empty }
     end
 
     context 'push to origin repo target branch' do
@@ -47,22 +56,29 @@ describe MergeRequests::RefreshService do
         reload_mrs
       end
 
-      it { @merge_request.notes.last.note.should include('changed to merged') }
-      it { @merge_request.should be_merged }
-      it { @fork_merge_request.should be_merged }
-      it { @fork_merge_request.notes.last.note.should include('changed to merged') }
+      it { expect(@merge_request.notes.last.note).to include('changed to merged') }
+      it { expect(@merge_request).to be_merged }
+      it { expect(@fork_merge_request).to be_merged }
+      it { expect(@fork_merge_request.notes.last.note).to include('changed to merged') }
     end
 
     context 'push to fork repo source branch' do
+      let(:refresh_service) { service.new(@fork_project, @user) }
       before do
-        service.new(@fork_project, @user).execute(@oldrev, @newrev, 'refs/heads/master')
+        allow(refresh_service).to receive(:execute_hooks)
+        refresh_service.execute(@oldrev, @newrev, 'refs/heads/master')
         reload_mrs
       end
 
-      it { @merge_request.notes.should be_empty }
-      it { @merge_request.should be_open }
-      it { @fork_merge_request.notes.last.note.should include('new commit') }
-      it { @fork_merge_request.should be_open }
+      it 'should execute hooks with update action' do
+        expect(refresh_service).to have_received(:execute_hooks).
+          with(@fork_merge_request, 'update')
+      end
+
+      it { expect(@merge_request.notes).to be_empty }
+      it { expect(@merge_request).to be_open }
+      it { expect(@fork_merge_request.notes.last.note).to include('Added 4 commits') }
+      it { expect(@fork_merge_request).to be_open }
     end
 
     context 'push to fork repo target branch' do
@@ -71,10 +87,10 @@ describe MergeRequests::RefreshService do
         reload_mrs
       end
 
-      it { @merge_request.notes.should be_empty }
-      it { @merge_request.should be_open }
-      it { @fork_merge_request.notes.should be_empty }
-      it { @fork_merge_request.should be_open }
+      it { expect(@merge_request.notes).to be_empty }
+      it { expect(@merge_request).to be_open }
+      it { expect(@fork_merge_request.notes).to be_empty }
+      it { expect(@fork_merge_request).to be_open }
     end
 
     context 'push to origin repo target branch after fork project was removed' do
@@ -84,10 +100,10 @@ describe MergeRequests::RefreshService do
         reload_mrs
       end
 
-      it { @merge_request.notes.last.note.should include('changed to merged') }
-      it { @merge_request.should be_merged }
-      it { @fork_merge_request.should be_open }
-      it { @fork_merge_request.notes.should be_empty }
+      it { expect(@merge_request.notes.last.note).to include('changed to merged') }
+      it { expect(@merge_request).to be_merged }
+      it { expect(@fork_merge_request).to be_open }
+      it { expect(@fork_merge_request.notes).to be_empty }
     end
 
     def reload_mrs

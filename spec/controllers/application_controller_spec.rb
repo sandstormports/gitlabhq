@@ -7,27 +7,67 @@ describe ApplicationController do
 
     it 'should redirect if the user is over their password expiry' do
       user.password_expires_at = Time.new(2002)
-      user.ldap_user?.should be_false
-      controller.stub(:current_user).and_return(user)
-      controller.should_receive(:redirect_to)
-      controller.should_receive(:new_profile_password_path)
+      expect(user.ldap_user?).to be_falsey
+      allow(controller).to receive(:current_user).and_return(user)
+      expect(controller).to receive(:redirect_to)
+      expect(controller).to receive(:new_profile_password_path)
       controller.send(:check_password_expiration)
     end
 
     it 'should not redirect if the user is under their password expiry' do
       user.password_expires_at = Time.now + 20010101
-      user.ldap_user?.should be_false
-      controller.stub(:current_user).and_return(user)
-      controller.should_not_receive(:redirect_to)
+      expect(user.ldap_user?).to be_falsey
+      allow(controller).to receive(:current_user).and_return(user)
+      expect(controller).not_to receive(:redirect_to)
       controller.send(:check_password_expiration)
     end
 
     it 'should not redirect if the user is over their password expiry but they are an ldap user' do
       user.password_expires_at = Time.new(2002)
-      user.stub(:ldap_user?).and_return(true)
-      controller.stub(:current_user).and_return(user)
-      controller.should_not_receive(:redirect_to)
+      allow(user).to receive(:ldap_user?).and_return(true)
+      allow(controller).to receive(:current_user).and_return(user)
+      expect(controller).not_to receive(:redirect_to)
       controller.send(:check_password_expiration)
+    end
+  end
+
+  describe 'check labels authorization' do
+    let(:project) { create(:project) }
+    let(:user) { create(:user) }
+    let(:controller) { ApplicationController.new }
+
+    before do
+      project.team << [user, :guest]
+      allow(controller).to receive(:current_user).and_return(user)
+      allow(controller).to receive(:project).and_return(project)
+    end
+
+    it 'should succeed if issues and MRs are enabled' do
+      project.issues_enabled = true
+      project.merge_requests_enabled = true
+      controller.send(:authorize_read_label!)
+      expect(response.status).to eq(200)
+    end
+
+    it 'should succeed if issues are enabled, MRs are disabled' do
+      project.issues_enabled = true
+      project.merge_requests_enabled = false
+      controller.send(:authorize_read_label!)
+      expect(response.status).to eq(200)
+    end
+
+    it 'should succeed if issues are disabled, MRs are enabled' do
+      project.issues_enabled = false
+      project.merge_requests_enabled = true
+      controller.send(:authorize_read_label!)
+      expect(response.status).to eq(200)
+    end
+
+    it 'should fail if issues and MRs are disabled' do
+      project.issues_enabled = false
+      project.merge_requests_enabled = false
+      expect(controller).to receive(:access_denied!)
+      controller.send(:authorize_read_label!)
     end
   end
 end

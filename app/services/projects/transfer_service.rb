@@ -11,19 +11,16 @@ module Projects
     include Gitlab::ShellAdapter
     class TransferError < StandardError; end
 
-    def execute
-      namespace_id = params[:namespace_id]
-      namespace = Namespace.find_by(id: namespace_id)
-
-      if allowed_transfer?(current_user, project, namespace)
-        transfer(project, namespace)
+    def execute(new_namespace)
+      if allowed_transfer?(current_user, project, new_namespace)
+        transfer(project, new_namespace)
       else
-        project.errors.add(:namespace, 'is invalid')
+        project.errors.add(:new_namespace, 'is invalid')
         false
       end
     rescue Projects::TransferService::TransferError => ex
       project.reload
-      project.errors.add(:namespace_id, ex.message)
+      project.errors.add(:new_namespace, ex.message)
       false
     end
 
@@ -36,12 +33,12 @@ module Projects
           raise TransferError.new("Project with same path in target namespace already exists")
         end
 
-        # Remove old satellite
-        project.satellite.destroy
-
         # Apply new namespace id
         project.namespace = new_namespace
         project.save!
+
+        # Notifications
+        project.send_move_instructions
 
         # Move main repository
         unless gitlab_shell.mv_repository(old_path, new_path)
@@ -50,9 +47,6 @@ module Projects
 
         # Move wiki repo also if present
         gitlab_shell.mv_repository("#{old_path}.wiki", "#{new_path}.wiki")
-
-        # Create a new satellite (reload project from DB)
-        Project.find(project.id).ensure_satellite_exists
 
         # clear project cached events
         project.reset_events_cache

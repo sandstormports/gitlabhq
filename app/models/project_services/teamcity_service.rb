@@ -1,15 +1,38 @@
+# == Schema Information
+#
+# Table name: services
+#
+#  id                    :integer          not null, primary key
+#  type                  :string(255)
+#  title                 :string(255)
+#  project_id            :integer
+#  created_at            :datetime
+#  updated_at            :datetime
+#  active                :boolean          default(FALSE), not null
+#  properties            :text
+#  template              :boolean          default(FALSE)
+#  push_events           :boolean          default(TRUE)
+#  issues_events         :boolean          default(TRUE)
+#  merge_requests_events :boolean          default(TRUE)
+#  tag_push_events       :boolean          default(TRUE)
+#  note_events           :boolean          default(TRUE), not null
+#
+
 class TeamcityService < CiService
   include HTTParty
 
   prop_accessor :teamcity_url, :build_type, :username, :password
 
-  validates :teamcity_url, presence: true,
-            format: { with: URI::regexp }, if: :activated?
+  validates :teamcity_url,
+    presence: true,
+    format: { with: /\A#{URI.regexp}\z/ }, if: :activated?
   validates :build_type, presence: true, if: :activated?
-  validates :username, presence: true,
-            if: ->(service) { service.password? }, if: :activated?
-  validates :password, presence: true,
-            if: ->(service) { service.username? }, if: :activated?
+  validates :username,
+    presence: true,
+    if: ->(service) { service.password? }, if: :activated?
+  validates :password,
+    presence: true,
+    if: ->(service) { service.username? }, if: :activated?
 
   attr_accessor :response
 
@@ -39,6 +62,10 @@ class TeamcityService < CiService
     'teamcity'
   end
 
+  def supported_events
+    %w(push)
+  end
+
   def fields
     [
       { type: 'text', name: 'teamcity_url',
@@ -61,7 +88,7 @@ class TeamcityService < CiService
     @response = HTTParty.get("#{url}", verify: false, basic_auth: auth)
   end
 
-  def build_page(sha)
+  def build_page(sha, ref)
     build_info(sha) if @response.nil? || !@response.code
 
     if @response.code != 200
@@ -76,7 +103,7 @@ class TeamcityService < CiService
     end
   end
 
-  def commit_status(sha)
+  def commit_status(sha, ref)
     build_info(sha) if @response.nil? || !@response.code
     return :error unless @response.code == 200 || @response.code == 404
 
@@ -98,12 +125,14 @@ class TeamcityService < CiService
   end
 
   def execute(data)
+    return unless supported_events.include?(data[:object_kind])
+
     auth = {
       username: username,
       password: password,
     }
 
-    branch = data[:ref]
+    branch = Gitlab::Git.ref_name(data[:ref])
 
     self.class.post("#{teamcity_url}/httpAuth/app/rest/buildQueue",
                     body: "<build branchName=\"#{branch}\">"\

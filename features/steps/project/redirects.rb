@@ -13,24 +13,24 @@ class Spinach::Features::ProjectRedirects < Spinach::FeatureSteps
 
   step 'I visit project "Community" page' do
     project = Project.find_by(name: 'Community')
-    visit project_path(project)
+    visit namespace_project_path(project.namespace, project)
   end
 
   step 'I should see project "Community" home page' do
-    Gitlab.config.gitlab.stub(:host).and_return("www.example.com")
-    within '.navbar-gitlab .title' do
-      page.should have_content 'Community'
+    Gitlab.config.gitlab.should_receive(:host).and_return("www.example.com")
+    page.within '.navbar-gitlab .title' do
+      expect(page).to have_content 'Community'
     end
   end
 
   step 'I visit project "Enterprise" page' do
     project = Project.find_by(name: 'Enterprise')
-    visit project_path(project)
+    visit namespace_project_path(project.namespace, project)
   end
 
   step 'I visit project "CommunityDoesNotExist" page' do
     project = Project.find_by(name: 'Community')
-    visit project_path(project) + 'DoesNotExist'
+    visit namespace_project_path(project.namespace, project) + 'DoesNotExist'
   end
 
   step 'I click on "Sign In"' do
@@ -48,8 +48,8 @@ class Spinach::Features::ProjectRedirects < Spinach::FeatureSteps
 
   step 'I should be redirected to "Community" page' do
     project = Project.find_by(name: 'Community')
-    current_path.should == "/#{project.path_with_namespace}"
-    status_code.should == 200
+    expect(current_path).to eq "/#{project.path_with_namespace}"
+    expect(status_code).to eq 200
   end
 
   step 'I get redirected to signin page where I sign in' do
@@ -63,7 +63,7 @@ class Spinach::Features::ProjectRedirects < Spinach::FeatureSteps
 
   step 'I should be redirected to "Enterprise" page' do
     project = Project.find_by(name: 'Enterprise')
-    current_path.should == "/#{project.path_with_namespace}"
-    status_code.should == 200
+    expect(current_path).to eq "/#{project.path_with_namespace}"
+    expect(status_code).to eq 200
   end
 end

@@ -24,7 +24,7 @@
 
 .slead {
   color: #666;
-  font-size: 14px;
+  font-size: 15px;
   margin-bottom: 12px;
   font-weight: normal;
   line-height: 24px;
@@ -54,9 +54,14 @@ pre {
   text-shadow: none;
 }
 
+.dropdown-menu-align-right {
+  left: auto;
+  right: 0px;
+}
+
 .dropdown-menu > li > a:hover,
 .dropdown-menu > li > a:focus {
-  background: $bg_primary;
+  background: $gl-primary;
   color: #FFF
 }
 
@@ -66,7 +71,7 @@ pre {
 
 /** FLASH message **/
 .author_link {
-  color: $link_color;
+  color: $gl-link-color;
 }
 
 .help li { color:$style_color; }
@@ -162,7 +167,7 @@ li.note {
   background-color: inherit;
 }
 
-.team_member_show {
+.project_member_show {
   td:first-child {
     color: #aaa;
   }
@@ -179,7 +184,7 @@ li.note {
   }
 }
 
-.supp_diff_link,
+.show-suppressed-diff,
 .show-all-commits {
   cursor: pointer;
 }
@@ -241,7 +246,7 @@ li.note {
 
 .milestone {
   &.milestone-closed {
-    background: #eee;
+    background: #f9f9f9;
   }
   .progress {
     margin-bottom: 0;
@@ -301,18 +306,6 @@ table {
   width: 100%;
 }
 
-.broadcast-message {
-  padding: 10px;
-  text-align: center;
-  background: #555;
-  color: #BBB;
-}
-
-.broadcast-message-preview {
-  @extend .broadcast-message;
-  margin-bottom: 20px;
-}
-
 .btn-sign-in {
   margin-top: 7px;
   text-shadow: none;
@@ -328,22 +321,20 @@ table {
   margin-bottom: 9px;
 }
 
-.footer-links a {
-  margin-right: 15px;
+.wiki .code {
+  overflow-x: auto;
+}
+
+.footer-links {
+  margin-bottom: 20px;
+  a {
+    margin-right: 15px;
+  }
 }
 
 .search_box {
-  position: relative;
-  padding: 30px;
+  @extend .well;
   text-align: center;
-  background-color: #F9F9F9;
-  border: 1px solid #DDDDDD;
-  border-radius: 0px;
-}
-
-.search_glyph {
-  color: #555;
-  font-size: 42px;
 }
 
 .task-status {
@@ -351,7 +342,54 @@ table {
 }
 
 #nprogress .spinner {
-  top: auto !important;
-  bottom: 20px !important;
-  left: 20px !important;
+  top: 15px !important;
+  right: 10px !important;
+}
+
+.header-with-avatar {
+  h3 {
+    margin: 0;
+    font-weight: bold;
+  }
+
+  .username {
+    font-size: 18px;
+    color: #666;
+    margin-top: 8px;
+  }
+
+  .description {
+    font-size: 16px;
+    color: #666;
+    margin-top: 8px;
+  }
+}
+
+.profiler-results {
+  top: 50px !important;
+
+  .profiler-button,
+  .profiler-controls {
+    border-color: #EEE !important;
+  }
+}
+
+.center-top-menu {
+  border-bottom: 1px solid #EEE;
+  list-style: none;
+  text-align: center;
+  padding-bottom: 15px;
+  margin-bottom: 15px;
+
+  li {
+    display: inline-block;
+
+    a {
+      padding: 10px;
+    }
+
+    &.active a {
+      color: #666;
+    }
+  }
 }

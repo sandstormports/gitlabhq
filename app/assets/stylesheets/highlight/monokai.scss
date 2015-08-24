@@ -1,5 +1,9 @@
 /* https://github.com/richleland/pygments-css/blob/master/monokai.css */
+pre.code.monokai,
 .code.monokai {
+
+  background: #272822;
+  color: #f8f8f2;
 
   pre.highlight,
   .line-numbers,
@@ -10,6 +14,11 @@
 
   pre.code {
     border-left: 1px solid #555;
+  }
+
+  // highlight line via anchor
+  pre .hll {
+    background-color: #49483e !important;
   }
 
   .hll { background-color: #49483e }

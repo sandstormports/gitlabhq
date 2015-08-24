@@ -14,9 +14,10 @@
 require Rails.root.join("app/models/commit")
 
 class MergeRequestDiff < ActiveRecord::Base
-  # Prevent store of diff
-  # if commits amount more then 200
-  COMMITS_SAFE_SIZE = 200
+  include Sortable
+
+  # Prevent store of diff if commits amount more then 500
+  COMMITS_SAFE_SIZE = 500
 
   attr_reader :commits, :diffs
 
@@ -65,7 +66,7 @@ class MergeRequestDiff < ActiveRecord::Base
   end
 
   def load_commits(array)
-    array.map { |hash| Commit.new(Gitlab::Git::Commit.new(hash)) }
+    array.map { |hash| Commit.new(Gitlab::Git::Commit.new(hash), merge_request.source_project) }
   end
 
   def dump_diffs(diffs)
@@ -86,7 +87,7 @@ class MergeRequestDiff < ActiveRecord::Base
     commits = compare_result.commits
 
     if commits.present?
-      commits = Commit.decorate(commits).
+      commits = Commit.decorate(commits, merge_request.source_project).
         sort_by(&:created_at).
         reverse
     end
@@ -122,12 +123,12 @@ class MergeRequestDiff < ActiveRecord::Base
     if new_diffs.any?
       if new_diffs.size > Commit::DIFF_HARD_LIMIT_FILES
         self.state = :overflow_diff_files_limit
-        new_diffs = []
+        new_diffs = new_diffs.first[Commit::DIFF_HARD_LIMIT_LINES]
       end
 
       if new_diffs.sum { |diff| diff.diff.lines.count } > Commit::DIFF_HARD_LIMIT_LINES
         self.state = :overflow_diff_lines_limit
-        new_diffs = []
+        new_diffs = new_diffs.first[Commit::DIFF_HARD_LIMIT_LINES]
       end
     end
 
@@ -158,12 +159,21 @@ class MergeRequestDiff < ActiveRecord::Base
   private
 
   def compare_result
-    @compare_result ||= CompareService.new.execute(
-      merge_request.author,
-      merge_request.source_project,
-      merge_request.source_branch,
-      merge_request.target_project,
-      merge_request.target_branch,
-    )
+    @compare_result ||=
+      begin
+        # Update ref for merge request
+        merge_request.fetch_ref
+
+        # Get latest sha of branch from source project
+        source_sha = merge_request.source_project.commit(source_branch).sha
+
+        Gitlab::CompareResult.new(
+          Gitlab::Git::Compare.new(
+            merge_request.target_project.repository.raw_repository,
+            merge_request.target_branch,
+            source_sha,
+          )
+        )
+      end
   end
 end

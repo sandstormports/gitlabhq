@@ -1,7 +1,7 @@
 require 'spec_helper'
 
 describe 'Gitlab::Popen', no_db: true do
-  let (:path) { Rails.root.join('tmp').to_s }
+  let(:path) { Rails.root.join('tmp').to_s }
 
   before do
     @klass = Class.new(Object)
@@ -13,8 +13,8 @@ describe 'Gitlab::Popen', no_db: true do
       @output, @status = @klass.new.popen(%W(ls), path)
     end
 
-    it { @status.should be_zero }
-    it { @output.should include('cache') }
+    it { expect(@status).to be_zero }
+    it { expect(@output).to include('cache') }
   end
 
   context 'non-zero status' do
@@ -22,13 +22,13 @@ describe 'Gitlab::Popen', no_db: true do
       @output, @status = @klass.new.popen(%W(cat NOTHING), path)
     end
 
-    it { @status.should == 1 }
-    it { @output.should include('No such file or directory') }
+    it { expect(@status).to eq(1) }
+    it { expect(@output).to include('No such file or directory') }
   end
 
   context 'unsafe string command' do
     it 'raises an error when it gets called with a string argument' do
-      expect { @klass.new.popen('ls', path) }.to raise_error
+      expect { @klass.new.popen('ls', path) }.to raise_error(RuntimeError)
     end
   end
 
@@ -37,9 +37,7 @@ describe 'Gitlab::Popen', no_db: true do
       @output, @status = @klass.new.popen(%W(ls))
     end
 
-    it { @status.should be_zero }
-    it { @output.should include('spec') }
+    it { expect(@status).to be_zero }
+    it { expect(@output).to include('spec') }
   end
-
 end
-

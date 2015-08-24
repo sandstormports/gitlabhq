@@ -1,16 +1,24 @@
+#= require autosave
+#= require dropzone
+#= require dropzone_input
+#= require gfm_auto_complete
+#= require jquery.atwho
+#= require task_list
+
 class @Notes
   @interval: null
 
-  constructor: (notes_url, note_ids, last_fetched_at) ->
+  constructor: (notes_url, note_ids, last_fetched_at, view) ->
     @notes_url = notes_url
-    @notes_url = gon.relative_url_root + @notes_url if gon.relative_url_root?
     @note_ids = note_ids
     @last_fetched_at = last_fetched_at
+    @view = view
     @noteable_url = document.URL
     @initRefresh()
     @setupMainTargetNoteForm()
     @cleanBinding()
     @addBinding()
+    @initTaskList()
 
   addBinding: ->
     # add note to UI after creation
@@ -37,10 +45,8 @@ class @Notes
     $(document).on "click", ".js-note-attachment-delete", @removeAttachment
 
     # reset main target form after submit
-    $(document).on "ajax:complete", ".js-main-target-form", @resetMainTargetForm
-
-    # attachment button
-    $(document).on "click", ".js-choose-note-attachment-button", @chooseNoteAttachment
+    $(document).on "ajax:complete", ".js-main-target-form", @reenableTargetFormSubmitButton
+    $(document).on "ajax:success", ".js-main-target-form", @resetMainTargetForm
 
     # update the file name when an attachment is selected
     $(document).on "change", ".js-note-attachment-input", @updateFormAttachment
@@ -57,11 +63,11 @@ class @Notes
     # fetch notes when tab becomes visible
     $(document).on "visibilitychange", @visibilityChange
 
-    @notes_forms = '.js-main-target-form textarea, .js-discussion-note-form textarea'
-    $(document).on('keypress', @notes_forms, (e)->
-      if e.keyCode == 10 || (e.ctrlKey && e.keyCode == 13)
-        $(@).parents('form').submit()
-    )
+    # Chrome doesn't fire keypress or keyup for Command+Enter, so we need keydown.
+    $(document).on 'keydown', '.js-note-text', (e) ->
+      return if e.originalEvent.repeat
+      if e.keyCode == 10 || ((e.metaKey || e.ctrlKey) && e.keyCode == 13)
+        $(@).closest('form').submit()
 
   cleanBinding: ->
     $(document).off "ajax:success", ".js-main-target-form"
@@ -72,14 +78,17 @@ class @Notes
     $(document).off "click", ".js-note-delete"
     $(document).off "click", ".js-note-attachment-delete"
     $(document).off "ajax:complete", ".js-main-target-form"
-    $(document).off "click", ".js-choose-note-attachment-button"
+    $(document).off "ajax:success", ".js-main-target-form"
     $(document).off "click", ".js-discussion-reply-button"
     $(document).off "click", ".js-add-diff-note-button"
     $(document).off "visibilitychange"
-    $(document).off "keypress", @notes_forms
+    $(document).off "keydown", ".js-note-text"
     $(document).off "keyup", ".js-note-text"
     $(document).off "click", ".js-note-target-reopen"
     $(document).off "click", ".js-note-target-close"
+
+    $('.note .js-task-list-container').taskList('disable')
+    $(document).off 'tasklist:changed', '.note .js-task-list-container'
 
   initRefresh: ->
     clearInterval(Notes.interval)
@@ -114,6 +123,7 @@ class @Notes
     if @isNewNote(note)
       @note_ids.push(note.id)
       $('ul.main-notes-list').append(note.html)
+      @initTaskList()
 
   ###
   Check if note does not exists on page
@@ -121,6 +131,8 @@ class @Notes
   isNewNote: (note) ->
     $.inArray(note.id, @note_ids) == -1
 
+  isParallelView: ->
+    @view == 'parallel'
 
   ###
   Render note in discussion area.
@@ -170,14 +182,12 @@ class @Notes
     form.find(".js-md-write-button").click()
     form.find(".js-note-text").val("").trigger "input"
 
-  ###
-  Called when clicking the "Choose File" button.
+    form.find(".js-note-text").data("autosave").reset()
 
-  Opens the file selection dialog.
-  ###
-  chooseNoteAttachment: ->
-    form = $(this).closest("form")
-    form.find(".js-note-attachment-input").click()
+  reenableTargetFormSubmitButton: ->
+    form = $(".js-main-target-form")
+
+    form.find(".js-note-text").trigger "input"
 
   ###
   Shows the main form and does some setup on it.
@@ -220,19 +230,28 @@ class @Notes
     # setup preview buttons
     form.find(".js-md-write-button, .js-md-preview-button").tooltip placement: "left"
     previewButton = form.find(".js-md-preview-button")
-    form.find(".js-note-text").on "input", ->
+
+    textarea = form.find(".js-note-text")
+
+    textarea.on "input", ->
       if $(this).val().trim() isnt ""
         previewButton.removeClass("turn-off").addClass "turn-on"
       else
         previewButton.removeClass("turn-on").addClass "turn-off"
 
+    new Autosave textarea, [
+      "Note"
+      form.find("#note_commit_id").val()
+      form.find("#note_line_code").val()
+      form.find("#note_noteable_type").val()
+      form.find("#note_noteable_id").val()
+    ]
 
     # remove notify commit author checkbox for non-commit notes
     form.find(".js-notify-commit-author").remove()  if form.find("#note_noteable_type").val() isnt "Commit"
     GitLab.GfmAutoComplete.setup()
     new DropzoneInput(form)
     form.show()
-
 
   ###
   Called in response to the new note form being submitted
@@ -260,7 +279,9 @@ class @Notes
     note_li = $(".note-row-" + note.id)
     note_li.replaceWith(note.html)
     note_li.find('.note-edit-form').hide()
-    note_li.find('.note-text').show()
+    note_li.find('.note-body > .note-text').show()
+    note_li.find('js-task-list-container').taskList('enable')
+    @enableTaskList()
 
   ###
   Called in response to clicking the edit note link
@@ -272,11 +293,11 @@ class @Notes
   showEditForm: (e) ->
     e.preventDefault()
     note = $(this).closest(".note")
-    note.find(".note-text").hide()
+    note.find(".note-body > .note-text").hide()
     note.find(".note-header").hide()
     base_form = note.find(".note-edit-form")
     form = base_form.clone().insertAfter(base_form)
-    form.addClass('current-note-edit-form')
+    form.addClass('current-note-edit-form gfm-form')
     form.find('.div-dropzone').remove()
 
     # Show the attachment delete link
@@ -289,6 +310,14 @@ class @Notes
     form.show()
     textarea = form.find("textarea")
     textarea.focus()
+
+    # HACK (rspeicher/DouweM): Work around a Chrome 43 bug(?).
+    # The textarea has the correct value, Chrome just won't show it unless we
+    # modify it, so let's clear it and re-set it!
+    value = textarea.val()
+    textarea.val ""
+    textarea.val value
+
     disableButtonIfEmptyField textarea, form.find(".js-comment-button")
 
   ###
@@ -299,7 +328,7 @@ class @Notes
   cancelEdit: (e) ->
     e.preventDefault()
     note = $(this).closest(".note")
-    note.find(".note-text").show()
+    note.find(".note-body > .note-text").show()
     note.find(".note-header").show()
     note.find(".current-note-edit-form").remove()
 
@@ -333,7 +362,7 @@ class @Notes
   removeAttachment: ->
     note = $(this).closest(".note")
     note.find(".note-attachment").remove()
-    note.find(".note-text").show()
+    note.find(".note-body > .note-text").show()
     note.find(".js-note-attachment-delete").hide()
     note.find(".note-edit-form").hide()
 
@@ -364,6 +393,7 @@ class @Notes
   setupDiscussionNoteForm: (dataHolder, form) =>
     # setup note target
     form.attr "rel", dataHolder.data("discussionId")
+    form.find("#line_type").val dataHolder.data("lineType")
     form.find("#note_commit_id").val dataHolder.data("commitId")
     form.find("#note_line_code").val dataHolder.data("lineCode")
     form.find("#note_noteable_type").val dataHolder.data("noteableType")
@@ -384,19 +414,40 @@ class @Notes
     form = $(".js-new-note-form")
     row = $(link).closest("tr")
     nextRow = row.next()
+    hasNotes = nextRow.is(".notes_holder")
+    addForm = false
+    targetContent = ".notes_content"
+    rowCssToAdd = "<tr class=\"notes_holder js-temp-notes-holder\"><td class=\"notes_line\" colspan=\"2\"></td><td class=\"notes_content\"></td></tr>"
 
-    # does it already have notes?
-    if nextRow.is(".notes_holder")
-      replyButton = nextRow.find(".js-discussion-reply-button")
-      if replyButton.length > 0
-        $.proxy(@replyToDiscussionNote, replyButton).call()
+    # In parallel view, look inside the correct left/right pane
+    if @isParallelView()
+      lineType = $(link).data("lineType")
+      targetContent += "." + lineType
+      rowCssToAdd = "<tr class=\"notes_holder js-temp-notes-holder\"><td class=\"notes_line\"></td><td class=\"notes_content parallel old\"></td><td class=\"notes_line\"></td><td class=\"notes_content parallel new\"></td></tr>"
+
+    if hasNotes
+      notesContent = nextRow.find(targetContent)
+      if notesContent.length
+        replyButton = notesContent.find(".js-discussion-reply-button:visible")
+        if replyButton.length
+          e.target = replyButton[0]
+          $.proxy(@replyToDiscussionNote, replyButton[0], e).call()
+        else
+          # In parallel view, the form may not be present in one of the panes
+          noteForm = notesContent.find(".js-discussion-note-form")
+          if noteForm.length == 0
+            addForm = true
     else
       # add a notes row and insert the form
-      row.after "<tr class=\"notes_holder js-temp-notes-holder\"><td class=\"notes_line\" colspan=\"2\"></td><td class=\"notes_content\"></td></tr>"
-      form.clone().appendTo row.next().find(".notes_content")
+      row.after rowCssToAdd
+      addForm = true
+
+    if addForm
+      newForm = form.clone()
+      newForm.appendTo row.next().find(targetContent)
 
       # show the form
-      @setupDiscussionNoteForm $(link), row.next().find("form")
+      @setupDiscussionNoteForm $(link), newForm
 
   ###
   Called in response to "cancel" on a diff note form.
@@ -406,6 +457,8 @@ class @Notes
   ###
   removeDiscussionNoteForm: (form)->
     row = form.closest("tr")
+
+    form.find(".js-note-text").data("autosave").reset()
 
     # show the reply button (will only work for replies)
     form.prev(".js-discussion-reply-button").show()
@@ -424,7 +477,7 @@ class @Notes
     @removeDiscussionNoteForm(form)
 
   updateVotes: ->
-    (new NotesVotes).updateVotes()
+    true
 
   ###
   Called after an attachment file has been selected.
@@ -470,3 +523,13 @@ class @Notes
     else
       form.find('.js-note-target-reopen').text('Reopen')
       form.find('.js-note-target-close').text('Close')
+
+  initTaskList: ->
+    @enableTaskList()
+    $(document).on 'tasklist:changed', '.note .js-task-list-container', @updateTaskList
+
+  enableTaskList: ->
+    $('.note .js-task-list-container').taskList('enable')
+
+  updateTaskList: ->
+    $('form', this).submit()

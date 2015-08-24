@@ -22,6 +22,7 @@ config/initializers/omniauth.rb
 config/initializers/rack_attack.rb
 config/initializers/smtp_settings.rb
 config/unicorn.rb
+config/mail_room.yml
 coverage/*
 db/*.sqlite3
 db/*.sqlite3-journal
@@ -34,6 +35,7 @@ public/assets/
 public/uploads.*
 public/uploads/
 rails_best_practices_output.html
-tags
+/tags
+tmp/
 vendor/bundle/*
 

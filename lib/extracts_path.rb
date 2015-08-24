@@ -1,16 +1,8 @@
 # Module providing methods for dealing with separating a tree-ish string and a
 # file path string when combined in a request parameter
 module ExtractsPath
-  extend ActiveSupport::Concern
-
   # Raised when given an invalid file path
   class InvalidPathError < StandardError; end
-
-  included do
-    if respond_to?(:before_filter)
-      before_filter :assign_ref_vars
-    end
-  end
 
   # Given a string containing both a Git tree-ish, such as a branch or tag, and
   # a filesystem path joined by forward slashes, attempts to separate the two.
@@ -63,12 +55,16 @@ module ExtractsPath
       valid_refs = @project.repository.ref_names
       valid_refs.select! { |v| id.start_with?("#{v}/") }
 
-      if valid_refs.length != 1
+      if valid_refs.length == 0
         # No exact ref match, so just try our best
         pair = id.match(/([^\/]+)(.*)/).captures
       else
+        # There is a distinct possibility that multiple refs prefix the ID.
+        # Use the longest match to maximize the chance that we have the
+        # right ref.
+        best_match = valid_refs.max_by(&:length)
         # Partition the string into the ref and the path, ignoring the empty first value
-        pair = id.partition(valid_refs.first)[1..-1]
+        pair = id.partition(best_match)[1..-1]
       end
     end
 
@@ -98,7 +94,7 @@ module ExtractsPath
     @options = params.select {|key, value| allowed_options.include?(key) && !value.blank? }
     @options = HashWithIndifferentAccess.new(@options)
 
-    @id = get_id
+    @id = Addressable::URI.unescape(get_id)
     @ref, @path = extract_ref(@id)
     @repo = @project.repository
     if @options[:extended_sha1].blank?
@@ -110,7 +106,8 @@ module ExtractsPath
     raise InvalidPathError unless @commit
 
     @hex_path = Digest::SHA1.hexdigest(@path)
-    @logs_path = logs_file_project_ref_path(@project, @ref, @path)
+    @logs_path = logs_file_namespace_project_ref_path(@project.namespace,
+                                                      @project, @ref, @path)
 
   rescue RuntimeError, NoMethodError, InvalidPathError
     not_found!
