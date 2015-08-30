@@ -45,8 +45,6 @@
         %span
           Network
 
-<<<<<<< HEAD
-=======
   - if project_nav_tab? :graphs
     = nav_link(controller: %w(graphs)) do
       = link_to namespace_project_graph_path(@project.namespace, @project, @ref || @repository.root_ref), title: 'Graphs',  class: 'shortcuts-graphs', data: {placement: 'right'} do
@@ -61,7 +59,6 @@
         %span
           Milestones
 
->>>>>>> master
   - if project_nav_tab? :issues
     = nav_link(controller: :issues) do
       = link_to url_for_project_issues(@project, only_path: true), title: 'Issues', class: 'shortcuts-issues', data: {placement: 'right'} do
