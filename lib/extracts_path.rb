@@ -1,3 +1,4 @@
+require 'addressable/uri'
 # Module providing methods for dealing with separating a tree-ish string and a
 # file path string when combined in a request parameter
 module ExtractsPath
