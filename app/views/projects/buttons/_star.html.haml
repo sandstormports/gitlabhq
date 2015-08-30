@@ -8,7 +8,7 @@
     %span.count
       = @project.star_count
 
-  -#:coffeescript
+  :coffeescript
     $('.project-home-panel .toggle-star').on 'ajax:success', (e, data, status, xhr) ->
       $(@).replaceWith(data.html)
     .on 'ajax:error', (e, xhr, status, error) ->
