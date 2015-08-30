@@ -12,7 +12,7 @@
     = render 'projects/buttons/star'
 
     - unless empty_repo
-      = render 'projects/buttons/fork'
+      -#= render 'projects/buttons/fork'
 
       - if forked_from_project = @project.forked_from_project
         = link_to project_path(forked_from_project), class: 'btn' do
