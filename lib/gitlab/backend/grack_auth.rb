@@ -23,8 +23,17 @@ module Grack
 
       @env['SCRIPT_NAME'] = ""
 
-      auth!
+      userid = env['HTTP_X_SANDSTORM_USER_ID'].encode(Encoding::UTF_8)
+      Rails.logger.info "LOOKING FOR USER " + userid
+      u = User.where(username: userid).first
+      if u
+        @user = u
+        Rails.logger.info "FOUND USER #{@user.id}"
 
+        Gitlab::ShellEnv.set_env(@user)
+        @env['REMOTE_USER'] = @user.username
+      end
+      STDERR.puts "OK"
       if project && authorized_request?
         if ENV['GITLAB_GRACK_AUTH_ONLY'] == '1'
           # Tell gitlab-git-http-server the request is OK, and what the GL_ID is
@@ -40,39 +49,6 @@ module Grack
     end
 
     private
-
-    def auth!
-      return unless @auth.provided?
-
-      return bad_request unless @auth.basic?
-
-      # Authentication with username and password
-      login, password = @auth.credentials
-
-      # Allow authentication for GitLab CI service
-      # if valid token passed
-      if gitlab_ci_request?(login, password)
-        @gitlab_ci = true
-        return
-      end
-
-      userid = env['HTTP_X_SANDSTORM_USER_ID'].encode(Encoding::UTF_8)
-      Rails.logger.info "LOOKING FOR USER " + userid
-      u = User.where(username: userid).first
-      if u
-        @user = u
-        Rails.logger.info "FOUND USER #{@user.id}"
-
-        Gitlab::ShellEnv.set_env(@user)
-        @env['REMOTE_USER'] = @user.username
-      end
-
-      if authorized_request?
-        @app.call(env)
-      else
-        unauthorized
-      end
-    end
 
     def gitlab_ci_request?(login, password)
       if login == "gitlab-ci-token" && project && project.gitlab_ci?
