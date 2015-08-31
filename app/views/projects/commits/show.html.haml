@@ -8,7 +8,7 @@
 .tree-ref-holder
   = render 'shared/ref_switcher', destination: 'commits'
 
-.commits-feed-holder.hidden-xs.hidden-sm
+-#.commits-feed-holder.hidden-xs.hidden-sm
   - if create_mr_button?(@repository.root_ref, @ref)
     = link_to create_mr_path(@repository.root_ref, @ref), class: 'btn btn-success' do
       = icon('plus')

@@ -23,7 +23,7 @@
           = f.text_field :name, class: "form-control", required: true
           %span.help-block Enter your name, so people you know can recognize you.
 
-      .form-group
+      -#.form-group
         = f.label :email, class: "control-label"
         .col-sm-10
           - if @user.ldap_user?
@@ -45,33 +45,33 @@
 
             - else
               %span.help-block We also use email for avatar detection if no avatar is uploaded.
-      .form-group
+      -#.form-group
         = f.label :public_email, class: "control-label"
         .col-sm-10
           = f.select :public_email, options_for_select(@user.all_emails, selected: @user.public_email), {include_blank: 'Do not show in profile'}, class: "form-control"
           %span.help-block This email will be displayed on your public profile.
-      .form-group
+      -#.form-group
         = f.label :skype, class: "control-label"
         .col-sm-10= f.text_field :skype, class: "form-control"
-      .form-group
+      -#.form-group
         = f.label :linkedin, class: "control-label"
         .col-sm-10= f.text_field :linkedin, class: "form-control"
-      .form-group
+      -#.form-group
         = f.label :twitter, class: "control-label"
         .col-sm-10= f.text_field :twitter, class: "form-control"
-      .form-group
+      -#.form-group
         = f.label :website_url, 'Website', class: "control-label"
         .col-sm-10= f.text_field :website_url, class: "form-control"
-      .form-group
+      -#.form-group
         = f.label :location, 'Location', class: "control-label"
         .col-sm-10= f.text_field :location, class: "form-control"
-      .form-group
+      -#.form-group
         = f.label :bio, class: "control-label"
         .col-sm-10
           = f.text_area :bio, rows: 4, class: "form-control", maxlength: 250
           %span.help-block Tell us about yourself in fewer than 250 characters.
 
-    .col-md-5
+    -#.col-md-5
       .light-well
         = image_tag avatar_icon(@user.email, 160), alt: '', class: 'avatar s160'
 
