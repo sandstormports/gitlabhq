@@ -1,5 +1,6 @@
 require 'html/pipeline/filter'
 require 'uri'
+require 'addressable/uri'
 
 module Gitlab
   module Markdown
