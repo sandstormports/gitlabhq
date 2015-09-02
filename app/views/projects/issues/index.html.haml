@@ -6,7 +6,7 @@
 .append-bottom-10
   .pull-right
     .pull-left
-      - if current_user
+      -# if current_user
         .hidden-xs.pull-left
           = link_to namespace_project_issues_path(@project.namespace, @project, :atom, { private_token: current_user.private_token }), class: 'btn append-right-10' do
             %i.fa.fa-rss
