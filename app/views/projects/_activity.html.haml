@@ -1,6 +1,6 @@
 = render 'projects/last_push'
 .hidden-xs
-  - if current_user
+  -# if current_user
     %ul.nav.nav-pills.event_filter.pull-right
       %li
         = link_to namespace_project_path(@project.namespace, @project, format: :atom, private_token: current_user.private_token), title: "Feed", class: 'rss-btn' do
