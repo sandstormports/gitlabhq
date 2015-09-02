@@ -32,6 +32,7 @@ module Devise
           u.save
         end
 
+        p = Project.where(name: "repo").first
         role = Gitlab::Access::GUEST
         if permission_list.include? 'owner'
           role = Gitlab::Access::OWNER
@@ -42,9 +43,9 @@ module Devise
         elsif permission_list.include? 'reporter'
           role = Gitlab::Access::REPORTER
         end
-
-        p = Project.where(name: "repo").first
-        p.team.add_user(u, role)
+        if p
+          p.team.add_user(u, role)
+        end
 
         Rails.logger.info 'Done Authenticating Sandstorm'
         success!(u)

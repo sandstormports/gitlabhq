@@ -24,11 +24,27 @@ module Grack
       @env['SCRIPT_NAME'] = ""
 
       userid = env['HTTP_X_SANDSTORM_USER_ID'].encode(Encoding::UTF_8)
-      Rails.logger.info "LOOKING FOR USER " + userid
+
       u = User.where(username: userid).first
       if u
         @user = u
         Rails.logger.info "FOUND USER #{@user.id}"
+
+        permission_list = env["HTTP_X_SANDSTORM_PERMISSIONS"].split(',')
+        project = Project.where(name: "repo").first
+        role = Gitlab::Access::GUEST
+        if permission_list.include? 'owner'
+          role = Gitlab::Access::OWNER
+        elsif permission_list.include? 'master'
+          role = Gitlab::Access::MASTER
+        elsif permission_list.include? 'developer'
+          role = Gitlab::Access::DEVELOPER
+        elsif permission_list.include? 'reporter'
+          role = Gitlab::Access::REPORTER
+        end
+        if project
+          project.team.add_user(u, role)
+        end
 
         Gitlab::ShellEnv.set_env(@user)
         @env['REMOTE_USER'] = @user.username
@@ -76,9 +92,6 @@ module Grack
     end
 
     def authorized_request?
-      # Sandstorm handles authorization.
-      return true
-
       case git_cmd
       when *Gitlab::GitAccess::DOWNLOAD_COMMANDS
         if user

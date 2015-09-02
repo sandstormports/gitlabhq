@@ -69,5 +69,5 @@ Gitlab::Application.configure do
 
   config.eager_load = false
 
-  config.allow_concurrency = false
+  config.allow_concurrency = true
 end

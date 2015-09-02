@@ -2,7 +2,7 @@ Dir["#{Rails.root}/lib/api/*.rb"].each {|file| require file}
 
 module API
   class API < Grape::API
-    include APIGuard
+    #include APIGuard
     version 'v3', using: :path
 
     rescue_from ActiveRecord::RecordNotFound do
@@ -27,28 +27,28 @@ module API
 
     helpers APIHelpers
 
-    mount Groups
-    mount GroupMembers
-    mount Users
-    mount Projects
-    mount Repositories
-    mount Issues
-    mount Milestones
-    mount Session
-    mount MergeRequests
-    mount Notes
+    #mount Groups
+    #mount GroupMembers
+    #mount Users
+    #mount Projects
+    #mount Repositories
+    #mount Issues
+    #mount Milestones
+    #mount Session
+    #mount MergeRequests
+    #mount Notes
     mount Internal
-    mount SystemHooks
-    mount ProjectSnippets
-    mount ProjectMembers
-    mount DeployKeys
-    mount ProjectHooks
-    mount Services
-    mount Files
-    mount Commits
-    mount Namespaces
-    mount Branches
-    mount Labels
-    mount Settings
+    #mount SystemHooks
+    #mount ProjectSnippets
+    #mount ProjectMembers
+    #mount DeployKeys
+    #mount ProjectHooks
+    #mount Services
+    #mount Files
+    #mount Commits
+    #mount Namespaces
+    #mount Branches
+    #mount Labels
+    #mount Settings
   end
 end

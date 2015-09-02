@@ -252,6 +252,8 @@ production: &base
     repos_path: /var/repositories/
     hooks_path: /gitlab-shell/hooks/
 
+    secret_file: /gitlab-shell/.gitlab_shell_secret
+
     # Git over HTTP
     upload_pack: true
     receive_pack: true
