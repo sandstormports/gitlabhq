@@ -3,13 +3,13 @@
     = link_to (current_user ? root_path : explore_root_path), title: 'Home', class: 'shortcuts-activity', data: {placement: 'right'} do
       = icon('dashboard fw')
       %span
-        Projects
-  = nav_link(controller: :groups) do
+        Project
+  -#= nav_link(controller: :groups) do
     = link_to (current_user ? dashboard_groups_path : explore_groups_path), title: 'Groups', data: {placement: 'right'} do
       = icon('group fw')
       %span
         Groups
-  - if current_user
+  -# if current_user
     = nav_link(controller: :milestones) do
       = link_to dashboard_milestones_path, title: 'Milestones', data: {placement: 'right'} do
         = icon('clock-o fw')
@@ -27,7 +27,7 @@
         %span
           Merge Requests
           %span.count= current_user.assigned_merge_requests.opened.count
-  = nav_link(controller: :snippets) do
+  -#= nav_link(controller: :snippets) do
     = link_to (current_user ? user_snippets_path(current_user) : snippets_path), title: 'Your snippets', data: {placement: 'right'} do
       = icon('dashboard fw')
       %span
