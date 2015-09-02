@@ -1,6 +1,7 @@
 module Devise
   module Strategies
     class Sandstorm < Authenticatable
+
       def authenticate!
         Rails.logger.info 'Authenticating Sandstorm'
         userid = request.headers['HTTP_X_SANDSTORM_USER_ID'].encode(Encoding::UTF_8)
@@ -26,10 +27,24 @@ module Devise
         end
 
         permission_list = request.headers["HTTP_X_SANDSTORM_PERMISSIONS"].split(',')
-        if (permission_list.include? 'admin') && !u.admin
+        if (permission_list.include? 'owner') && !u.admin
           u.admin = true
           u.save
         end
+
+        role = Gitlab::Access::GUEST
+        if permission_list.include? 'owner'
+          role = Gitlab::Access::OWNER
+        elsif permission_list.include? 'master'
+          role = Gitlab::Access::MASTER
+        elsif permission_list.include? 'developer'
+          role = Gitlab::Access::DEVELOPER
+        elsif permission_list.include? 'reporter'
+          role = Gitlab::Access::REPORTER
+        end
+
+        p = Project.where(name: "repo").first
+        p.team.add_user(u, role)
 
         Rails.logger.info 'Done Authenticating Sandstorm'
         success!(u)

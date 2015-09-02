@@ -28,7 +28,7 @@
         = icon('cogs fw')
         %span
           Services
-    -#= nav_link(controller: :protected_branches) do
+    = nav_link(controller: :protected_branches) do
       = link_to namespace_project_protected_branches_path(@project.namespace, @project), title: 'Protected Branches', data: {placement: 'right'} do
         = icon('lock fw')
         %span
