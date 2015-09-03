@@ -51,7 +51,7 @@ module Gitlab
         pipeline: options[:pipeline],
 
         # EmojiFilter
-        asset_root: Gitlab.config.gitlab.url,
+        asset_root: "/",
         asset_host: Gitlab::Application.config.asset_host,
 
         # TableOfContentsFilter
