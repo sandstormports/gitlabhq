@@ -21,6 +21,11 @@ class DashboardController < Dashboard::ApplicationController
         p = ::Projects::CreateService.new(current_user, name: "repo", path: "repo", namespace_id: g.id).execute
       end
 
+      if p.visibility_level != 0
+        p.visibility_level = 0
+        p.save
+      end
+
       redirect_to project_path(p)
       return
     end
