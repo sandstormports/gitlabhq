@@ -76,7 +76,7 @@
     %hr
     %p.light
       You have #{access} access to this project.
-      - if @project.project_member_by_id(current_user)
+      -# if @project.project_member_by_id(current_user)
         = link_to leave_namespace_project_project_members_path(@project.namespace, @project),
           data: { confirm: leave_project_message(@project) }, method: :delete, title: 'Leave project', class: 'cred' do
           Leave this project

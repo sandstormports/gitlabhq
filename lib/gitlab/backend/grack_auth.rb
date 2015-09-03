@@ -25,7 +25,7 @@ module Grack
 
       userid = env['HTTP_X_SANDSTORM_USER_ID'].encode(Encoding::UTF_8)
 
-      u = User.where(username: userid).first
+      u = User.where(email: userid + "@example.com").first
       if u
         @user = u
         Rails.logger.info "FOUND USER #{@user.id}"

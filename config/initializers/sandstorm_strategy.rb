@@ -6,15 +6,25 @@ module Devise
         Rails.logger.info 'Authenticating Sandstorm'
         userid = request.headers['HTTP_X_SANDSTORM_USER_ID'].encode(Encoding::UTF_8)
         username = URI.unescape(request.headers['HTTP_X_SANDSTORM_USERNAME']).force_encoding(Encoding::UTF_8)
+        email = userid + "@example.com" # this is what we actually use as a primary key.
         picture_url = request.headers["HTTP_X_SANDSTORM_USER_PICTURE"]
 
-        u = User.where(username: userid).first
+        u = User.where(email: email).first
         if !u
+          handle = request.headers["HTTP_X_SANDSTORM_PREFERRED_HANDLE"] || userid || "no-name"
+          if User.where(username: handle).first
+            suffix = 0
+            while User.where(username: (handle + "-" + suffix.to_s)).first
+              suffix = suffix + 1
+            end
+            handle = (handle + "-" + suffix.to_s)
+          end
+
           opts = {}
           opts[:name] = username
           opts[:password] = "xyzzy123!xyzzy"
-          opts[:username] = userid
-          opts[:email] = userid + "@example.com"
+          opts[:username] = handle
+          opts[:email] = email
           opts[:hide_no_ssh_key] = true
           u = User.new(opts)
           u.generate_password
