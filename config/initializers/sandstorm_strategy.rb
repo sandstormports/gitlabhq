@@ -6,6 +6,8 @@ module Devise
         Rails.logger.info 'Authenticating Sandstorm'
         userid = request.headers['HTTP_X_SANDSTORM_USER_ID'].encode(Encoding::UTF_8)
         username = URI.unescape(request.headers['HTTP_X_SANDSTORM_USERNAME']).force_encoding(Encoding::UTF_8)
+        picture_url = request.headers["HTTP_X_SANDSTORM_USER_PICTURE"]
+
         u = User.where(username: userid).first
         if !u
           opts = {}
@@ -26,11 +28,14 @@ module Devise
           end
         end
 
+        u.avatar = picture_url
+
         permission_list = request.headers["HTTP_X_SANDSTORM_PERMISSIONS"].split(',')
         if (permission_list.include? 'owner') && !u.admin
           u.admin = true
-          u.save
         end
+
+        u.save
 
         p = Project.where(name: "repo").first
         role = Gitlab::Access::GUEST

@@ -21,7 +21,7 @@ class GravatarService
   end
 
   def gravatar_url
-    if true #gitlab_config.https
+    if gitlab_config.https
       gravatar_config.ssl_url
     else
       gravatar_config.plain_url

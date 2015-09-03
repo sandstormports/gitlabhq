@@ -148,11 +148,11 @@ class User < ActiveRecord::Base
 
   validates :notification_level, inclusion: { in: Notification.notification_levels }, presence: true
   validate :namespace_uniq, if: ->(user) { user.username_changed? }
-  validate :avatar_type, if: ->(user) { user.avatar.present? && user.avatar_changed? }
+  #validate :avatar_type, if: ->(user) { user.avatar.present? && user.avatar_changed? }
   validate :unique_email, if: ->(user) { user.email_changed? }
   validate :owns_notification_email, if: ->(user) { user.notification_email_changed? }
   validate :owns_public_email, if: ->(user) { user.public_email_changed? }
-  validates :avatar, file_size: { maximum: 200.kilobytes.to_i }
+  #validates :avatar, file_size: { maximum: 200.kilobytes.to_i }
 
   before_validation :generate_password, on: :create
   before_validation :restricted_signup_domains, on: :create
@@ -189,7 +189,7 @@ class User < ActiveRecord::Base
     end
   end
 
-  mount_uploader :avatar, AvatarUploader
+  #mount_uploader :avatar, AvatarUploader
 
   # Scopes
   scope :admins, -> { where(admin: true) }
@@ -343,9 +343,10 @@ class User < ActiveRecord::Base
   end
 
   def avatar_type
-    unless self.avatar.image?
-      self.errors.add :avatar, "only images allowed"
-    end
+    # in the Sandstorm port, we store the avatar URL in the `avatar` field.
+    #unless self.avatar.image?
+    #  self.errors.add :avatar, "only images allowed"
+    #end
   end
 
   def unique_email
@@ -636,9 +637,10 @@ class User < ActiveRecord::Base
 
   def avatar_url(size = nil)
     if avatar.present?
-      [gitlab_config.url, avatar.url].join
+      avatar
+      #[gitlab_config.url, avatar.url].join
     else
-      GravatarService.new.execute(email, size)
+      #GravatarService.new.execute(email, size)
     end
   end
 
