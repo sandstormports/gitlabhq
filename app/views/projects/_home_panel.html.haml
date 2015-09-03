@@ -27,4 +27,5 @@
 
     = render 'projects/buttons/dropdown'
 
-  = render "shared/clone_panel"
+  - if current_user && can?(current_user, :download_code, @project)
+    = render "shared/clone_panel"
