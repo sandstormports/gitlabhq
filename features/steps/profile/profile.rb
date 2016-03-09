@@ -13,7 +13,7 @@ class Spinach::Features::Profile < Spinach::FeatureSteps
     fill_in 'user_website_url', with: 'testurl'
     fill_in 'user_location', with: 'Ukraine'
     fill_in 'user_bio', with: 'I <3 GitLab'
-    click_button 'Save changes'
+    click_button 'Update profile settings'
     @user.reload
   end
 
@@ -27,14 +27,12 @@ class Spinach::Features::Profile < Spinach::FeatureSteps
   end
 
   step 'I change my avatar' do
-    attach_file(:user_avatar, File.join(Rails.root, 'spec', 'fixtures', 'banana_sample.gif'))
-    click_button "Save changes"
-    @user.reload
+    attach_avatar
   end
 
   step 'I should see new avatar' do
     expect(@user.avatar).to be_instance_of AvatarUploader
-    expect(@user.avatar.url).to eq "/uploads/user/avatar/#{ @user.id }/banana_sample.gif"
+    expect(@user.avatar.url).to eq "/uploads/user/avatar/#{@user.id}/banana_sample.gif"
   end
 
   step 'I should see the "Remove avatar" button' do
@@ -42,9 +40,7 @@ class Spinach::Features::Profile < Spinach::FeatureSteps
   end
 
   step 'I have an avatar' do
-    attach_file(:user_avatar, File.join(Rails.root, 'spec', 'fixtures', 'banana_sample.gif'))
-    click_button "Save changes"
-    @user.reload
+    attach_avatar
   end
 
   step 'I remove my avatar' do
@@ -59,7 +55,7 @@ class Spinach::Features::Profile < Spinach::FeatureSteps
   step 'I should not see the "Remove avatar" button' do
     expect(page).not_to have_link("Remove avatar")
   end
-  
+
   step 'I should see the gravatar host link' do
     expect(page).to have_link("gravatar.com")
   end
@@ -68,7 +64,7 @@ class Spinach::Features::Profile < Spinach::FeatureSteps
     page.within '.update-password' do
       fill_in "user_password", with: "22233344"
       fill_in "user_password_confirmation", with: "22233344"
-      click_button "Save"
+      click_button "Save password"
     end
   end
 
@@ -77,7 +73,7 @@ class Spinach::Features::Profile < Spinach::FeatureSteps
       fill_in "user_current_password", with: "12345678"
       fill_in "user_password", with: "22233344"
       fill_in "user_password_confirmation", with: "22233344"
-      click_button "Save"
+      click_button "Save password"
     end
   end
 
@@ -86,7 +82,7 @@ class Spinach::Features::Profile < Spinach::FeatureSteps
       fill_in "user_current_password", with: "12345678"
       fill_in "user_password", with: "password"
       fill_in "user_password_confirmation", with: "confirmation"
-      click_button "Save"
+      click_button "Save password"
     end
   end
 
@@ -97,7 +93,7 @@ class Spinach::Features::Profile < Spinach::FeatureSteps
   end
 
   step "I should see a password error message" do
-    page.within '.alert' do
+    page.within '.alert-danger' do
       expect(page).to have_content "Password confirmation doesn't match"
     end
   end
@@ -159,10 +155,9 @@ class Spinach::Features::Profile < Spinach::FeatureSteps
   end
 
   step 'I should see my user page' do
-    expect(page).to have_content "User Activity"
-
-    page.within '.navbar-gitlab' do
+    page.within ".cover-block" do
       expect(page).to have_content current_user.name
+      expect(page).to have_content current_user.username
     end
   end
 
@@ -176,7 +171,13 @@ class Spinach::Features::Profile < Spinach::FeatureSteps
   end
 
   step 'I should see groups I belong to' do
-    expect(page).to have_css('.profile-groups-avatars', visible: true)
+    page.within ".content" do
+      click_link "Groups"
+    end
+
+    page.within "#groups" do
+      expect(page).to have_content @group.name
+    end
   end
 
   step 'I click on new application button' do
@@ -227,5 +228,17 @@ class Spinach::Features::Profile < Spinach::FeatureSteps
 
   step "I see that application is removed" do
     expect(page.find(".oauth-applications")).not_to have_content "test_changed"
+  end
+
+  def attach_avatar
+    attach_file :user_avatar, Rails.root.join(*%w(spec fixtures banana_sample.gif))
+
+    page.find('#user_avatar_crop_x',    visible: false).set('0')
+    page.find('#user_avatar_crop_y',    visible: false).set('0')
+    page.find('#user_avatar_crop_size', visible: false).set('256')
+
+    click_button "Update profile settings"
+
+    @user.reload
   end
 end

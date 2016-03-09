@@ -9,9 +9,10 @@ module TestEnv
     'flatten-dir'      => 'e56497b',
     'feature'          => '0b4bc9a',
     'feature_conflict' => 'bb5206f',
-    'fix'              => '12d65c8',
+    'fix'              => '48f0be4',
     'improve/awesome'  => '5937ac0',
     'markdown'         => '0ed8c6c',
+    'lfs'              => 'be93687',
     'master'           => '5937ac0',
     "'test'"           => 'e56497b',
   }
@@ -21,7 +22,8 @@ module TestEnv
   # We currently only need a subset of the branches
   FORKED_BRANCH_SHA = {
     'add-submodule-version-bump' => '3f547c08',
-    'master' => '5937ac0'
+    'master' => '5937ac0',
+    'remove-submodule' => '2a33e0c0'
   }
 
   # Test environment
@@ -96,15 +98,15 @@ module TestEnv
     clone_url = "https://gitlab.com/gitlab-org/#{repo_name}.git"
 
     unless File.directory?(repo_path)
-      system(*%W(git clone -q #{clone_url} #{repo_path}))
+      system(*%W(#{Gitlab.config.git.bin_path} clone -q #{clone_url} #{repo_path}))
     end
 
     Dir.chdir(repo_path) do
       branch_sha.each do |branch, sha|
         # Try to reset without fetching to avoid using the network.
-        reset = %W(git update-ref refs/heads/#{branch} #{sha})
+        reset = %W(#{Gitlab.config.git.bin_path} update-ref refs/heads/#{branch} #{sha})
         unless system(*reset)
-          if system(*%w(git fetch origin))
+          if system(*%W(#{Gitlab.config.git.bin_path} fetch origin))
             unless system(*reset)
               raise 'The fetched test seed '\
               'does not contain the required revision.'
@@ -117,7 +119,7 @@ module TestEnv
     end
 
     # We must copy bare repositories because we will push to them.
-    system(git_env, *%W(git clone -q --bare #{repo_path} #{repo_path_bare}))
+    system(git_env, *%W(#{Gitlab.config.git.bin_path} clone -q --bare #{repo_path} #{repo_path_bare}))
   end
 
   def copy_repo(project)
@@ -142,6 +144,22 @@ module TestEnv
     FileUtils.mkdir_p(target_repo_path)
     FileUtils.cp_r("#{base_repo_path}/.", target_repo_path)
     FileUtils.chmod_R 0755, target_repo_path
+  end
+
+  # When no cached assets exist, manually hit the root path to create them
+  #
+  # Otherwise they'd be created by the first test, often timing out and
+  # causing a transient test failure
+  def warm_asset_cache
+    return if warm_asset_cache?
+    return unless defined?(Capybara)
+
+    Capybara.current_session.driver.visit '/'
+  end
+
+  def warm_asset_cache?
+    cache = Rails.root.join(*%w(tmp cache assets test))
+    Dir.exist?(cache) && Dir.entries(cache).length > 2
   end
 
   private
@@ -169,7 +187,6 @@ module TestEnv
   def forked_repo_name
     'gitlab-test-fork'
   end
-
 
   # Prevent developer git configurations from being persisted to test
   # repositories

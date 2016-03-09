@@ -1,6 +1,6 @@
 require 'spec_helper'
 
-describe Commit do
+describe Commit, models: true do
   let(:project) { create(:project) }
   let(:commit)  { project.commit }
 
@@ -21,6 +21,17 @@ describe Commit do
     it 'supports a cross-project reference' do
       cross = double('project')
       expect(commit.to_reference(cross)).to eq "#{project.to_reference}@#{commit.id}"
+    end
+  end
+
+  describe '#reference_link_text' do
+    it 'returns a String reference to the object' do
+      expect(commit.reference_link_text).to eq commit.short_id
+    end
+
+    it 'supports a cross-project reference' do
+      cross = double('project')
+      expect(commit.reference_link_text(cross)).to eq "#{project.to_reference}@#{commit.short_id}"
     end
   end
 
@@ -77,21 +88,17 @@ eos
     let(:other_issue) { create :issue, project: other_project }
 
     it 'detects issues that this commit is marked as closing' do
-      allow(commit).to receive(:safe_message).and_return("Fixes ##{issue.iid}")
-      expect(commit.closes_issues).to eq([issue])
-    end
-
-    it 'does not detect issues from other projects' do
       ext_ref = "#{other_project.path_with_namespace}##{other_issue.iid}"
-      allow(commit).to receive(:safe_message).and_return("Fixes #{ext_ref}")
-      expect(commit.closes_issues).to be_empty
+      allow(commit).to receive(:safe_message).and_return("Fixes ##{issue.iid} and #{ext_ref}")
+      expect(commit.closes_issues).to include(issue)
+      expect(commit.closes_issues).to include(other_issue)
     end
   end
 
   it_behaves_like 'a mentionable' do
-    subject { commit }
+    subject { create(:project).commit }
 
-    let(:author) { create(:user, email: commit.author_email) }
+    let(:author) { create(:user, email: subject.author_email) }
     let(:backref_text) { "commit #{subject.id}" }
     let(:set_mentionable_text) do
       ->(txt) { allow(subject).to receive(:safe_message).and_return(txt) }
@@ -99,5 +106,50 @@ eos
 
     # Include the subject in the repository stub.
     let(:extra_commits) { [subject] }
+  end
+
+  describe '#hook_attrs' do
+    let(:data) { commit.hook_attrs(with_changed_files: true) }
+
+    it { expect(data).to be_a(Hash) }
+    it { expect(data[:message]).to include('Add submodule from gitlab.com') }
+    it { expect(data[:timestamp]).to eq('2014-02-27T11:01:38+02:00') }
+    it { expect(data[:added]).to eq(["gitlab-grack"]) }
+    it { expect(data[:modified]).to eq([".gitmodules"]) }
+    it { expect(data[:removed]).to eq([]) }
+  end
+
+  describe '#reverts_commit?' do
+    let(:another_commit) { double(:commit, revert_description: "This reverts commit #{commit.sha}") }
+
+    it { expect(commit.reverts_commit?(another_commit)).to be_falsy }
+
+    context 'commit has no description' do
+      before { allow(commit).to receive(:description?).and_return(false) }
+
+      it { expect(commit.reverts_commit?(another_commit)).to be_falsy }
+    end
+
+    context "another_commit's description does not revert commit" do
+      before { allow(commit).to receive(:description).and_return("Foo Bar") }
+
+      it { expect(commit.reverts_commit?(another_commit)).to be_falsy }
+    end
+
+    context "another_commit's description reverts commit" do
+      before { allow(commit).to receive(:description).and_return("Foo #{another_commit.revert_description} Bar") }
+
+      it { expect(commit.reverts_commit?(another_commit)).to be_truthy }
+    end
+
+    context "another_commit's description reverts merged merge request" do
+      before do
+        revert_description = "This reverts merge request !foo123"
+        allow(another_commit).to receive(:revert_description).and_return(revert_description)
+        allow(commit).to receive(:description).and_return("Foo #{another_commit.revert_description} Bar")
+      end
+
+      it { expect(commit.reverts_commit?(another_commit)).to be_truthy }
+    end
   end
 end

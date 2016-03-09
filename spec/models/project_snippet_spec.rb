@@ -10,14 +10,13 @@
 #  created_at       :datetime
 #  updated_at       :datetime
 #  file_name        :string(255)
-#  expires_at       :datetime
 #  type             :string(255)
 #  visibility_level :integer          default(0), not null
 #
 
 require 'spec_helper'
 
-describe ProjectSnippet do
+describe ProjectSnippet, models: true do
   describe "Associations" do
     it { is_expected.to belong_to(:project) }
   end

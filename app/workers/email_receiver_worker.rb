@@ -4,7 +4,7 @@ class EmailReceiverWorker
   sidekiq_options queue: :incoming_email
 
   def perform(raw)
-    return unless Gitlab::ReplyByEmail.enabled?
+    return unless Gitlab::IncomingEmail.enabled?
 
     begin
       Gitlab::Email::Receiver.new(raw).execute
@@ -17,6 +17,8 @@ class EmailReceiverWorker
 
   def handle_failure(raw, e)
     Rails.logger.warn("Email can not be processed: #{e}\n\n#{raw}")
+
+    return unless raw.present?
 
     can_retry = false
     reason = nil
@@ -44,6 +46,6 @@ class EmailReceiverWorker
       return
     end
 
-    EmailRejectionMailer.delay.rejection(reason, raw, can_retry)
+    EmailRejectionMailer.rejection(reason, raw, can_retry).deliver_later
   end
 end

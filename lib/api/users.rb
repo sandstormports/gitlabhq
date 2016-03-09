@@ -3,16 +3,22 @@ module API
   class Users < Grape::API
     before { authenticate! }
 
-    resource :users do
+    resource :users, requirements: { uid: /[0-9]*/, id: /[0-9]*/ } do
       # Get a users list
       #
       # Example Request:
       #  GET /users
+      #  GET /users?search=Admin
+      #  GET /users?username=root
       get do
-        @users = User.all
-        @users = @users.active if params[:active].present?
-        @users = @users.search(params[:search]) if params[:search].present?
-        @users = paginate @users
+        if params[:username].present?
+          @users = User.where(username: params[:username])
+        else
+          @users = User.all
+          @users = @users.active if params[:active].present?
+          @users = @users.search(params[:search]) if params[:search].present?
+          @users = paginate @users
+        end
 
         if current_user.is_admin?
           present @users, with: Entities::UserFull
@@ -33,7 +39,7 @@ module API
         if current_user.is_admin?
           present @user, with: Entities::UserFull
         else
-          present @user, with: Entities::UserBasic
+          present @user, with: Entities::User
         end
       end
 
@@ -120,6 +126,17 @@ module API
         conflict!('Username has already been taken') if attrs[:username] &&
             User.where(username: attrs[:username]).
                 where.not(id: user.id).count > 0
+
+        identity_attrs = attributes_for_keys [:provider, :extern_uid]
+        if identity_attrs.any?
+          identity = user.identities.find_by(provider: identity_attrs[:provider])
+          if identity
+            identity.update_attributes(identity_attrs)
+          else
+            identity = user.identities.build(identity_attrs)
+            identity.save
+          end
+        end
 
         if user.update_attributes(attrs)
           present user, with: Entities::UserFull
@@ -267,10 +284,12 @@ module API
         authenticated_as_admin!
         user = User.find_by(id: params[:id])
 
-        if user
+        if !user
+          not_found!('User')
+        elsif !user.ldap_blocked?
           user.block
         else
-          not_found!('User')
+          forbidden!('LDAP blocked users cannot be modified by the API')
         end
       end
 
@@ -282,10 +301,12 @@ module API
         authenticated_as_admin!
         user = User.find_by(id: params[:id])
 
-        if user
-          user.activate
-        else
+        if !user
           not_found!('User')
+        elsif user.ldap_blocked?
+          forbidden!('LDAP blocked users cannot be unblocked by the API')
+        else
+          user.activate
         end
       end
     end

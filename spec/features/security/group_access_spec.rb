@@ -16,11 +16,11 @@ describe 'Group access', feature: true do
     end
   end
 
-  def group_member(access_level, group = group)
+  def group_member(access_level, grp = group())
     level = Object.const_get("Gitlab::Access::#{access_level.upcase}")
 
     create(:user).tap do |user|
-      group.add_user(user, level)
+      grp.add_user(user, level)
     end
   end
 
@@ -68,7 +68,7 @@ describe 'Group access', feature: true do
       it { is_expected.to be_allowed_for group_member(:guest) }
       it { is_expected.to be_allowed_for :admin }
       it { is_expected.to be_allowed_for :user }
-      it { is_expected.to be_denied_for :visitor }
+      it { is_expected.to be_allowed_for :visitor }
     end
 
     context 'with no projects' do
@@ -77,8 +77,8 @@ describe 'Group access', feature: true do
       it { is_expected.to be_allowed_for group_member(:reporter) }
       it { is_expected.to be_allowed_for group_member(:guest) }
       it { is_expected.to be_allowed_for :admin }
-      it { is_expected.to be_denied_for :user }
-      it { is_expected.to be_denied_for :visitor }
+      it { is_expected.to be_allowed_for :user }
+      it { is_expected.to be_allowed_for :visitor }
     end
   end
 

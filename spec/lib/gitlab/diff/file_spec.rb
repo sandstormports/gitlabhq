@@ -1,12 +1,12 @@
 require 'spec_helper'
 
-describe Gitlab::Diff::File do
+describe Gitlab::Diff::File, lib: true do
   include RepoHelpers
 
   let(:project) { create(:project) }
   let(:commit) { project.commit(sample_commit.id) }
   let(:diff) { commit.diffs.first }
-  let(:diff_file) { Gitlab::Diff::File.new(diff) }
+  let(:diff_file) { Gitlab::Diff::File.new(diff, [commit.parent, commit]) }
 
   describe :diff_lines do
     let(:diff_lines) { diff_file.diff_lines }

@@ -65,7 +65,7 @@ module Gitlab
       def reply_key
         reply_key = nil
         message.to.each do |address|
-          reply_key = Gitlab::ReplyByEmail.reply_key_from_address(address)
+          reply_key = Gitlab::IncomingEmail.key_from_address(address)
           break if reply_key
         end
 
@@ -74,7 +74,7 @@ module Gitlab
 
       def sent_notification
         return nil unless reply_key
-        
+
         SentNotification.for(reply_key)
       end
 
@@ -82,10 +82,7 @@ module Gitlab
         attachments = Email::AttachmentUploader.new(message).execute(sent_notification.project)
 
         attachments.each do |link|
-          text = "[#{link[:alt]}](#{link[:url]})"
-          text.prepend("!") if link[:is_image]
-
-          reply << "\n\n#{text}"
+          reply << "\n\n#{link[:markdown]}"
         end
 
         reply
@@ -98,7 +95,8 @@ module Gitlab
           note:           reply,
           noteable_type:  sent_notification.noteable_type,
           noteable_id:    sent_notification.noteable_id,
-          commit_id:      sent_notification.commit_id
+          commit_id:      sent_notification.commit_id,
+          line_code:      sent_notification.line_code
         ).execute
       end
     end

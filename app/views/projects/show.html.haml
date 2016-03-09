@@ -1,20 +1,21 @@
+- @no_container = true
+
 = content_for :meta_tags do
   - if current_user
     = auto_discovery_link_tag(:atom, namespace_project_path(@project.namespace, @project, format: :atom, private_token: current_user.private_token), title: "#{@project.name} activity")
 
-- if current_user && can?(current_user, :download_code, @project)
-  = render 'shared/no_ssh'
-  = render 'shared/no_password'
+= content_for :flash_message do
+  - if current_user && can?(current_user, :download_code, @project)
+    = render 'shared/no_ssh'
+    = render 'shared/no_password'
 
-- if prefer_readme?
-  = render 'projects/last_push'
-
+= render 'projects/last_push'
 = render "home_panel"
 
-.project-stats
-  %ul.nav.nav-pills
+.project-stats.gray-content-block.second-block
+  %ul.nav
     %li
-      = link_to namespace_project_commits_path(@project.namespace, @project, @ref || @repository.root_ref) do
+      = link_to namespace_project_commits_path(@project.namespace, @project, current_ref) do
         = pluralize(number_with_delimiter(@project.commit_count), 'commit')
     %li
       = link_to namespace_project_branches_path(@project.namespace, @project) do
@@ -24,10 +25,10 @@
         = pluralize(number_with_delimiter(@repository.tag_names.count), 'tag')
 
     %li
-      = link_to namespace_project_path(@project.namespace, @project) do
+      = link_to project_files_path(@project) do
         = repository_size
 
-    - if !prefer_readme? && @repository.readme
+    - if default_project_view != 'readme' && @repository.readme
       %li
         = link_to 'Readme', readme_path(@project)
 
@@ -57,26 +58,18 @@
           = link_to add_contribution_guide_path(@project) do
             Add Contribution guide
 
-        .prepend-top-10
-          %p
-            %span.light Created on
-            #{@project.created_at.stamp('Aug 22, 2013')}
+- if @repository.commit
+  .content-block.second-block.white
+    %div{ class: container_class }
+      = render 'projects/last_commit', commit: @repository.commit, project: @project
 
-%hr
-%section
-  - if prefer_readme?
-    = render 'projects/readme'
-  - else
-    = render 'projects/activity'
+%div{ class: container_class }
+  - if @project.archived?
+    .text-warning.center.prepend-top-20
+      %p
+        = icon("exclamation-triangle fw")
+        Archived project! Repository is read-only
 
+  %div{class: "project-show-#{default_project_view}"}
+    = render default_project_view
 
-- if current_user
-  - access = user_max_access_in_project(current_user, @project)
-  - if access
-    %hr
-    %p.light
-      You have #{access} access to this project.
-      -# if @project.project_member_by_id(current_user)
-        = link_to leave_namespace_project_project_members_path(@project.namespace, @project),
-          data: { confirm: leave_project_message(@project) }, method: :delete, title: 'Leave project', class: 'cred' do
-          Leave this project

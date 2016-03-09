@@ -13,6 +13,12 @@ class Admin::ApplicationSettingsController < Admin::ApplicationController
     end
   end
 
+  def reset_runners_token
+    @application_setting.reset_runners_registration_token!
+    flash[:notice] = 'New runners registration token has been generated!'
+    redirect_to admin_runners_path
+  end
+
   private
 
   def set_application_setting
@@ -43,9 +49,12 @@ class Admin::ApplicationSettingsController < Admin::ApplicationController
       :default_branch_protection,
       :signup_enabled,
       :signin_enabled,
+      :require_two_factor_authentication,
+      :two_factor_grace_period,
       :gravatar_enabled,
       :twitter_sharing_enabled,
       :sign_in_text,
+      :help_page_text,
       :home_page_url,
       :after_sign_out_path,
       :max_attachment_size,
@@ -54,7 +63,25 @@ class Admin::ApplicationSettingsController < Admin::ApplicationController
       :default_snippet_visibility,
       :restricted_signup_domains_raw,
       :version_check_enabled,
+      :admin_notification_email,
       :user_oauth_applications,
+      :shared_runners_enabled,
+      :max_artifacts_size,
+      :metrics_enabled,
+      :metrics_host,
+      :metrics_port,
+      :metrics_pool_size,
+      :metrics_timeout,
+      :metrics_method_call_threshold,
+      :metrics_sample_interval,
+      :recaptcha_enabled,
+      :recaptcha_site_key,
+      :recaptcha_private_key,
+      :sentry_enabled,
+      :sentry_dsn,
+      :akismet_enabled,
+      :akismet_api_key,
+      :email_author_in_body,
       restricted_visibility_levels: [],
       import_sources: []
     )

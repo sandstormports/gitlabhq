@@ -3,12 +3,14 @@ class EmailRejectionMailer < BaseMailer
     @reason = reason
     @original_message = Mail::Message.new(original_raw)
 
+    return unless @original_message.from
+
     headers = {
       to: @original_message.from,
       subject: "[Rejected] #{@original_message.subject}"
     }
 
-    headers['Message-ID'] = SecureRandom.hex
+    headers['Message-ID'] = "<#{SecureRandom.hex}@#{Gitlab.config.gitlab.host}>"
     headers['In-Reply-To'] = @original_message.message_id
     headers['References'] = @original_message.message_id
 

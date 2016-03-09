@@ -27,7 +27,7 @@ class ProfilesController < Profiles::ApplicationController
     end
 
     respond_to do |format|
-      format.html {redirect_to "/profile"}
+      format.html { redirect_back_or_default(default: { action: 'show' }) }
     end
   end
 
@@ -66,11 +66,15 @@ class ProfilesController < Profiles::ApplicationController
 
   def user_params
     params.require(:user).permit(
+      :avatar_crop_x,
+      :avatar_crop_y,
+      :avatar_crop_size,
       :avatar,
       :bio,
       :email,
       :hide_no_password,
       :hide_no_ssh_key,
+      :hide_project_limit,
       :linkedin,
       :location,
       :name,

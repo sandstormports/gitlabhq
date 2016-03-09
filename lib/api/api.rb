@@ -25,7 +25,7 @@ module API
     format :json
     content_type :txt, "text/plain"
 
-    helpers APIHelpers
+    helpers Helpers
 
     #mount Groups
     #mount GroupMembers
@@ -38,6 +38,7 @@ module API
     #mount MergeRequests
     #mount Notes
     mount Internal
+<<<<<<< HEAD
     #mount SystemHooks
     #mount ProjectSnippets
     #mount ProjectMembers
@@ -50,5 +51,26 @@ module API
     #mount Branches
     #mount Labels
     #mount Settings
+=======
+    mount SystemHooks
+    mount ProjectSnippets
+    mount ProjectMembers
+    mount DeployKeys
+    mount ProjectHooks
+    mount Services
+    mount Files
+    mount Commits
+    mount CommitStatus
+    mount Namespaces
+    mount Branches
+    mount Labels
+    mount Settings
+    mount Keys
+    mount Tags
+    mount Triggers
+    mount Builds
+    mount Variables
+    mount Runners
+>>>>>>> upstream/master
   end
 end

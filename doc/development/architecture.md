@@ -42,7 +42,7 @@ Gitlab-shell communicates with Sidekiq via the “communication board” (Redis)
 
 ## System Layout
 
-When referring to ~git in the pictures it means the home directory of the git user which is typically /home/git.
+When referring to `~git` in the pictures it means the home directory of the git user which is typically /home/git.
 
 GitLab is primarily installed within the `/home/git` user home directory as `git` user. Within the home directory is where the gitlabhq server software resides as well as the repositories (though the repository location is configurable).
 
@@ -146,7 +146,7 @@ nginx
 
 Apache httpd
 
-- [Explanation of Apache logs](http://httpd.apache.org/docs/2.2/logs.html).
+- [Explanation of Apache logs](https://httpd.apache.org/docs/2.2/logs.html).
 - `/var/log/apache2/` contains error and output logs (on Ubuntu).
 - `/var/log/httpd/` contains error and output logs (on RHEL).
 

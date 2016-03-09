@@ -1,6 +1,6 @@
 require "spec_helper"
 
-describe Gitlab::Email::AttachmentUploader do
+describe Gitlab::Email::AttachmentUploader, lib: true do
   describe "#execute" do
     let(:project) { build(:project) }
     let(:message_raw) { fixture_file("emails/attachment.eml") }
@@ -13,7 +13,6 @@ describe Gitlab::Email::AttachmentUploader do
       expect(link).not_to be_nil
       expect(link[:is_image]).to be_truthy
       expect(link[:alt]).to eq("bricks")
-      expect(link[:url]).to include("/#{project.path_with_namespace}")
       expect(link[:url]).to include("bricks.png")
     end
   end

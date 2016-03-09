@@ -38,6 +38,7 @@ The GitLab installation consists of setting up the following components:
 
 1. Packages / Dependencies
 1. Ruby
+1. Go
 1. System Users
 1. Database
 1. Redis
@@ -62,7 +63,7 @@ up-to-date and install it.
 
 Install the required packages (needed to compile Ruby and native extensions to Ruby gems):
 
-    sudo apt-get install -y build-essential zlib1g-dev libyaml-dev libssl-dev libgdbm-dev libreadline-dev libncurses5-dev libffi-dev curl openssh-server redis-server checkinstall libxml2-dev libxslt-dev libcurl4-openssl-dev libicu-dev logrotate python-docutils pkg-config cmake nodejs
+    sudo apt-get install -y build-essential zlib1g-dev libyaml-dev libssl-dev libgdbm-dev libreadline-dev libncurses5-dev libffi-dev curl openssh-server checkinstall libxml2-dev libxslt-dev libcurl4-openssl-dev libicu-dev logrotate python-docutils pkg-config cmake nodejs
 
 If you want to use Kerberos for user authentication, then install libkrb5-dev:
 
@@ -106,17 +107,25 @@ Then select 'Internet Site' and press enter to confirm the hostname.
 
 ## 2. Ruby
 
-The use of Ruby version managers such as [RVM](http://rvm.io/), [rbenv](https://github.com/sstephenson/rbenv) or [chruby](https://github.com/postmodern/chruby) with GitLab in production frequently leads to hard to diagnose problems. For example, GitLab Shell is called from OpenSSH and having a version manager can prevent pushing and pulling over SSH. Version managers are not supported and we strongly advise everyone to follow the instructions below to use a system Ruby.
+_**Note:** The current supported Ruby version is 2.1.x. Ruby 2.2 and 2.3 are
+currently not supported._
 
-Remove the old Ruby 1.8 if present
+The use of Ruby version managers such as [RVM], [rbenv] or [chruby] with GitLab
+in production, frequently leads to hard to diagnose problems. For example,
+GitLab Shell is called from OpenSSH, and having a version manager can prevent
+pushing and pulling over SSH. Version managers are not supported and we strongly
+advise everyone to follow the instructions below to use a system Ruby.
+
+Remove the old Ruby 1.8 if present:
 
     sudo apt-get remove ruby1.8
 
 Download Ruby and compile it:
 
     mkdir /tmp/ruby && cd /tmp/ruby
-    curl -L --progress http://cache.ruby-lang.org/pub/ruby/2.1/ruby-2.1.6.tar.gz | tar xz
-    cd ruby-2.1.6
+    curl -O --progress https://cache.ruby-lang.org/pub/ruby/2.1/ruby-2.1.8.tar.gz
+    echo 'c7e50159357afd87b13dc5eaf4ac486a70011149  ruby-2.1.8.tar.gz' | shasum -c - && tar xzf ruby-2.1.8.tar.gz
+    cd ruby-2.1.8
     ./configure --disable-install-rdoc
     make
     sudo make install
@@ -125,13 +134,27 @@ Install the Bundler Gem:
 
     sudo gem install bundler --no-ri --no-rdoc
 
-## 3. System Users
+## 3. Go
+
+Since GitLab 8.0, Git HTTP requests are handled by gitlab-workhorse (formerly
+gitlab-git-http-server). This is a small daemon written in Go. To install
+gitlab-workhorse we need a Go compiler. The instructions below assume you
+use 64-bit Linux. You can find downloads for other platforms at the [Go download
+page](https://golang.org/dl).
+
+    curl -O --progress https://storage.googleapis.com/golang/go1.5.3.linux-amd64.tar.gz
+    echo '43afe0c5017e502630b1aea4d44b8a7f059bf60d7f29dfd58db454d4e4e0ae53  go1.5.3.linux-amd64.tar.gz' | shasum -c - && \
+      sudo tar -C /usr/local -xzf go1.5.3.linux-amd64.tar.gz
+    sudo ln -sf /usr/local/go/bin/{go,godoc,gofmt} /usr/local/bin/
+    rm go1.5.3.linux-amd64.tar.gz
+
+## 4. System Users
 
 Create a `git` user for GitLab:
 
     sudo adduser --disabled-login --gecos 'GitLab' git
 
-## 4. Database
+## 5. Database
 
 We recommend using a PostgreSQL database. For MySQL check [MySQL setup guide](database_mysql.md). *Note*: because we need to make use of extensions you need at least pgsql 9.1.
 
@@ -157,37 +180,52 @@ We recommend using a PostgreSQL database. For MySQL check [MySQL setup guide](da
     # Quit the database session
     gitlabhq_production> \q
 
-## 5. Redis
+## 6. Redis
 
-    sudo apt-get install redis-server
+GitLab requires at least Redis 2.8.
 
-    # Configure redis to use sockets
-    sudo cp /etc/redis/redis.conf /etc/redis/redis.conf.orig
+If you are using Debian 8 or Ubuntu 14.04 and up, then you can simply install
+Redis 2.8 with:
 
-    # Disable Redis listening on TCP by setting 'port' to 0
-    sed 's/^port .*/port 0/' /etc/redis/redis.conf.orig | sudo tee /etc/redis/redis.conf
+```sh
+sudo apt-get install redis-server
+```
 
-    # Enable Redis socket for default Debian / Ubuntu path
-    echo 'unixsocket /var/run/redis/redis.sock' | sudo tee -a /etc/redis/redis.conf
-    # Grant permission to the socket to all members of the redis group
-    echo 'unixsocketperm 770' | sudo tee -a /etc/redis/redis.conf
+If you are using Debian 7 or Ubuntu 12.04, follow the special documentation
+on [an alternate Redis installation](redis.md). Once done, follow the rest of
+the guide here.
 
-    # Create the directory which contains the socket
-    mkdir /var/run/redis
-    chown redis:redis /var/run/redis
-    chmod 755 /var/run/redis
-    # Persist the directory which contains the socket, if applicable
-    if [ -d /etc/tmpfiles.d ]; then
-      echo 'd  /var/run/redis  0755  redis  redis  10d  -' | sudo tee -a /etc/tmpfiles.d/redis.conf
-    fi
+```
+# Configure redis to use sockets
+sudo cp /etc/redis/redis.conf /etc/redis/redis.conf.orig
 
-    # Activate the changes to redis.conf
-    sudo service redis-server restart
+# Disable Redis listening on TCP by setting 'port' to 0
+sed 's/^port .*/port 0/' /etc/redis/redis.conf.orig | sudo tee /etc/redis/redis.conf
 
-    # Add git to the redis group
-    sudo usermod -aG redis git
+# Enable Redis socket for default Debian / Ubuntu path
+echo 'unixsocket /var/run/redis/redis.sock' | sudo tee -a /etc/redis/redis.conf
 
-## 6. GitLab
+# Grant permission to the socket to all members of the redis group
+echo 'unixsocketperm 770' | sudo tee -a /etc/redis/redis.conf
+
+# Create the directory which contains the socket
+mkdir /var/run/redis
+chown redis:redis /var/run/redis
+chmod 755 /var/run/redis
+
+# Persist the directory which contains the socket, if applicable
+if [ -d /etc/tmpfiles.d ]; then
+  echo 'd  /var/run/redis  0755  redis  redis  10d  -' | sudo tee -a /etc/tmpfiles.d/redis.conf
+fi
+
+# Activate the changes to redis.conf
+sudo service redis-server restart
+
+# Add git to the redis group
+sudo usermod -aG redis git
+```
+
+## 7. GitLab
 
     # We'll install GitLab into home directory of the user "git"
     cd /home/git
@@ -195,9 +233,9 @@ We recommend using a PostgreSQL database. For MySQL check [MySQL setup guide](da
 ### Clone the Source
 
     # Clone GitLab repository
-    sudo -u git -H git clone https://gitlab.com/gitlab-org/gitlab-ce.git -b 7-14-stable gitlab
+    sudo -u git -H git clone https://gitlab.com/gitlab-org/gitlab-ce.git -b 8-5-stable gitlab
 
-**Note:** You can change `7-14-stable` to `master` if you want the *bleeding edge* version, but never install master on a production server!
+**Note:** You can change `8-5-stable` to `master` if you want the *bleeding edge* version, but never install master on a production server!
 
 ### Configure It
 
@@ -210,6 +248,10 @@ We recommend using a PostgreSQL database. For MySQL check [MySQL setup guide](da
     # Update GitLab config file, follow the directions at top of file
     sudo -u git -H editor config/gitlab.yml
 
+    # Copy the example secrets file
+    sudo -u git -H cp config/secrets.yml.example config/secrets.yml
+    sudo -u git -H chmod 0600 config/secrets.yml
+
     # Make sure GitLab can write to the log/ and tmp/ directories
     sudo chown -R git log/
     sudo chown -R git tmp/
@@ -220,8 +262,18 @@ We recommend using a PostgreSQL database. For MySQL check [MySQL setup guide](da
     sudo chmod -R u+rwX tmp/pids/
     sudo chmod -R u+rwX tmp/sockets/
 
-    # Make sure GitLab can write to the public/uploads/ directory
-    sudo chmod -R u+rwX  public/uploads
+    # Create the public/uploads/ directory
+    sudo -u git -H mkdir public/uploads/
+
+    # Make sure only the GitLab user has access to the public/uploads/ directory
+    # now that files in public/uploads are served by gitlab-workhorse
+    sudo chmod 0700 public/uploads
+
+    # Change the permissions of the directory where CI build traces are stored
+    sudo chmod -R u+rwX builds/
+
+    # Change the permissions of the directory where CI artifacts are stored
+    sudo chmod -R u+rwX shared/artifacts/
 
     # Copy the example Unicorn config
     sudo -u git -H cp config/unicorn.rb.example config/unicorn.rb
@@ -230,8 +282,8 @@ We recommend using a PostgreSQL database. For MySQL check [MySQL setup guide](da
     nproc
 
     # Enable cluster mode if you expect to have a high load instance
-    # Ex. change amount of workers to 3 for 2GB RAM server
     # Set the number of workers to at least the number of cores
+    # Ex. change amount of workers to 3 for 2GB RAM server
     sudo -u git -H editor config/unicorn.rb
 
     # Copy the example Rack attack config
@@ -272,7 +324,7 @@ We recommend using a PostgreSQL database. For MySQL check [MySQL setup guide](da
 
 ### Install Gems
 
-**Note:** As of bundler 1.5.2, you can invoke `bundle install -jN` (where `N` the number of your processor cores) and enjoy the parallel gems installation with measurable difference in completion time (~60% faster). Check the number of your cores with `nproc`. For more information check this [post](http://robots.thoughtbot.com/parallel-gem-installing-using-bundler). First make sure you have bundler >= 1.5.2 (run `bundle -v`) as it addresses some [issues](https://devcenter.heroku.com/changelog-items/411) that were [fixed](https://github.com/bundler/bundler/pull/2817) in 1.5.2.
+**Note:** As of bundler 1.5.2, you can invoke `bundle install -jN` (where `N` the number of your processor cores) and enjoy the parallel gems installation with measurable difference in completion time (~60% faster). Check the number of your cores with `nproc`. For more information check this [post](https://robots.thoughtbot.com/parallel-gem-installing-using-bundler). First make sure you have bundler >= 1.5.2 (run `bundle -v`) as it addresses some [issues](https://devcenter.heroku.com/changelog-items/411) that were [fixed](https://github.com/bundler/bundler/pull/2817) in 1.5.2.
 
     # For PostgreSQL (note, the option says "without ... mysql")
     sudo -u git -H bundle install --deployment --without development test mysql aws kerberos
@@ -287,7 +339,7 @@ We recommend using a PostgreSQL database. For MySQL check [MySQL setup guide](da
 GitLab Shell is an SSH access and repository management software developed specially for GitLab.
 
     # Run the installation task for gitlab-shell (replace `REDIS_URL` if needed):
-    sudo -u git -H bundle exec rake gitlab:shell:install[v2.6.3] REDIS_URL=unix:/var/run/redis/redis.sock RAILS_ENV=production
+    sudo -u git -H bundle exec rake gitlab:shell:install REDIS_URL=unix:/var/run/redis/redis.sock RAILS_ENV=production
 
     # By default, the gitlab-shell config is generated from your main GitLab config.
     # You can review (and modify) the gitlab-shell config as follows:
@@ -295,9 +347,21 @@ GitLab Shell is an SSH access and repository management software developed speci
 
 **Note:** If you want to use HTTPS, see [Using HTTPS](#using-https) for the additional steps.
 
-**Note:** Make sure your hostname can be resolved on the machine itself by either a proper DNS record or an additional line in /etc/hosts ("127.0.0.1  hostname"). This might be necessary for example if you set up gitlab behind a reverse proxy. If the hostname cannot be resolved, the final installation check will fail with "Check GitLab API access: FAILED. code: 401" and pushing commits will be rejected with "[remote rejected] master -> master (hook declined)".
+**Note:** Make sure your hostname can be resolved on the machine itself by either a proper DNS record or an additional line in /etc/hosts ("127.0.0.1  hostname"). This might be necessary for example if you set up GitLab behind a reverse proxy. If the hostname cannot be resolved, the final installation check will fail with "Check GitLab API access: FAILED. code: 401" and pushing commits will be rejected with "[remote rejected] master -> master (hook declined)".
+
+### Install gitlab-workhorse
+
+    cd /home/git
+    sudo -u git -H git clone https://gitlab.com/gitlab-org/gitlab-workhorse.git
+    cd gitlab-workhorse
+    sudo -u git -H git checkout 0.6.5
+    sudo -u git -H make
 
 ### Initialize Database and Activate Advanced Features
+
+    # Go to GitLab installation folder
+
+    cd /home/git/gitlab
 
     sudo -u git -H bundle exec rake gitlab:setup RAILS_ENV=production
 
@@ -305,9 +369,15 @@ GitLab Shell is an SSH access and repository management software developed speci
 
     # When done you see 'Administrator account created:'
 
-**Note:** You can set the Administrator/root password by supplying it in environmental variable `GITLAB_ROOT_PASSWORD` as seen below. If you don't set the password (and it is set to the default one) please wait with exposing GitLab to the public internet until the installation is done and you've logged into the server the first time. During the first login you'll be forced to change the default password.
+**Note:** You can set the Administrator/root password and e-mail by supplying them in environmental variables, `GITLAB_ROOT_PASSWORD` and `GITLAB_ROOT_EMAIL` respectively, as seen below. If you don't set the password (and it is set to the default one) please wait with exposing GitLab to the public internet until the installation is done and you've logged into the server the first time. During the first login you'll be forced to change the default password.
 
-    sudo -u git -H bundle exec rake gitlab:setup RAILS_ENV=production GITLAB_ROOT_PASSWORD=yourpassword
+    sudo -u git -H bundle exec rake gitlab:setup RAILS_ENV=production GITLAB_ROOT_PASSWORD=yourpassword GITLAB_ROOT_EMAIL=youremail
+
+### Secure secrets.yml
+
+The `secrets.yml` file stores encryption keys for sessions and secure variables.
+Backup `secrets.yml` someplace safe, but don't store it in the same place as your database backups.
+Otherwise your secrets are exposed if one of your backups is compromised.
 
 ### Install Init Script
 
@@ -345,7 +415,7 @@ Check if GitLab and its environment are configured correctly:
     # or
     sudo /etc/init.d/gitlab restart
 
-## 7. Nginx
+## 8. Nginx
 
 **Note:** Nginx is the officially supported web server for GitLab. If you cannot or do not want to use Nginx as your web server, have a look at the [GitLab recipes](https://gitlab.com/gitlab-org/gitlab-recipes/).
 
@@ -397,18 +467,26 @@ NOTE: Supply `SANITIZE=true` environment variable to `gitlab:check` to omit proj
 
 ### Initial Login
 
-Visit YOUR_SERVER in your web browser for your first GitLab login. The setup has created a default admin account for you. You can use it to log in:
+Visit YOUR_SERVER in your web browser for your first GitLab login.
 
-    root
-    5iveL!fe
+If you didn't [provide a root password during setup](#initialize-database-and-activate-advanced-features),
+you'll be redirected to a password reset screen to provide the password for the
+initial administrator account. Enter your desired password and you'll be
+redirected back to the login screen.
 
-**Important Note:** On login you'll be prompted to change the password.
+The default account's username is **root**. Provide the password you created
+earlier and login. After login you can change the username if you wish.
 
 **Enjoy!**
 
 You can use `sudo service gitlab start` and `sudo service gitlab stop` to start and stop GitLab.
 
 ## Advanced Setup Tips
+
+### Relative URL support
+
+See the [Relative URL documentation](relative_url.md) for more information on
+how to configure GitLab with a relative URL.
 
 ### Using HTTPS
 
@@ -437,9 +515,22 @@ Using a self-signed certificate is discouraged but if you must use it follow the
     ```
 1. In the `config.yml` of gitlab-shell set `self_signed_cert` to `true`.
 
-### Additional Markup Styles
+### Enable Reply by email
 
-Apart from the always supported markdown style there are other rich text files that GitLab can display. But you might have to install a dependency to do so. Please see the [github-markup gem readme](https://github.com/gitlabhq/markup#markups) for more information.
+See the ["Reply by email" documentation](../incoming_email/README.md) for more information on how to set this up.
+
+### LDAP Authentication
+
+You can configure LDAP authentication in `config/gitlab.yml`. Please restart GitLab after editing this file.
+
+### Using Custom Omniauth Providers
+
+See the [omniauth integration document](../integration/omniauth.md)
+
+### Build your projects
+
+GitLab can build your projects. To enable that feature you need GitLab Runners to do that for you.
+Checkout the [GitLab Runner section](https://about.gitlab.com/gitlab-ci/#gitlab-runner) to install it
 
 ### Custom Redis Connection
 
@@ -465,10 +556,20 @@ If you are running SSH on a non-standard port, you must change the GitLab user's
 
 You also need to change the corresponding options (e.g. `ssh_user`, `ssh_host`, `admin_uri`) in the `config\gitlab.yml` file.
 
-### LDAP Authentication
+### Additional Markup Styles
 
-You can configure LDAP authentication in `config/gitlab.yml`. Please restart GitLab after editing this file.
+Apart from the always supported markdown style there are other rich text files that GitLab can display. But you might have to install a dependency to do so. Please see the [github-markup gem readme](https://github.com/gitlabhq/markup#markups) for more information.
 
-### Using Custom Omniauth Providers
+## Troubleshooting
 
-See the [omniauth integration document](../integration/omniauth.md)
+### "You appear to have cloned an empty repository."
+
+If you see this message when attempting to clone a repository hosted by GitLab,
+this is likely due to an outdated Nginx or Apache configuration, or a missing or
+misconfigured gitlab-workhorse instance. Double-check that you've
+[installed Go](#3-go), [installed gitlab-workhorse](#install-gitlab-workhorse),
+and correctly [configured Nginx](#site-configuration).
+
+[RVM]: https://rvm.io/ "RVM Homepage"
+[rbenv]: https://github.com/sstephenson/rbenv "rbenv on GitHub"
+[chruby]: https://github.com/postmodern/chruby "chruby on GitHub"

@@ -28,11 +28,19 @@
 #  import_type            :string(255)
 #  import_source          :string(255)
 #  commit_count           :integer          default(0)
+#  import_error           :text
+#  ci_id                  :integer
+#  builds_enabled         :boolean          default(TRUE), not null
+#  shared_runners_enabled :boolean          default(TRUE), not null
+#  runners_token          :string
+#  build_coverage_regex   :string
+#  build_allow_git_fetch  :boolean          default(TRUE), not null
+#  build_timeout          :integer          default(3600), not null
 #
 
 require 'spec_helper'
 
-describe Project do
+describe Project, models: true do
   describe 'associations' do
     it { is_expected.to belong_to(:group) }
     it { is_expected.to belong_to(:namespace) }
@@ -53,6 +61,13 @@ describe Project do
     it { is_expected.to have_one(:slack_service).dependent(:destroy) }
     it { is_expected.to have_one(:pushover_service).dependent(:destroy) }
     it { is_expected.to have_one(:asana_service).dependent(:destroy) }
+    it { is_expected.to have_many(:commit_statuses) }
+    it { is_expected.to have_many(:ci_commits) }
+    it { is_expected.to have_many(:builds) }
+    it { is_expected.to have_many(:runner_projects) }
+    it { is_expected.to have_many(:runners) }
+    it { is_expected.to have_many(:variables) }
+    it { is_expected.to have_many(:triggers) }
   end
 
   describe 'modules' do
@@ -85,6 +100,18 @@ describe Project do
       allow(project2).to receive(:creator).and_return(double(can_create_project?: false, projects_limit: 0).as_null_object)
       expect(project2).not_to be_valid
       expect(project2.errors[:limit_reached].first).to match(/Your project limit is 0/)
+    end
+  end
+
+  describe 'project token' do
+    it 'should set an random token if none provided' do
+      project = FactoryGirl.create :empty_project, runners_token: ''
+      expect(project.runners_token).not_to eq('')
+    end
+
+    it 'should not set an random toke if one provided' do
+      project = FactoryGirl.create :empty_project, runners_token: 'my-token'
+      expect(project.runners_token).to eq('my-token')
     end
   end
 
@@ -140,7 +167,7 @@ describe Project do
 
     describe 'last_activity_date' do
       it 'returns the creation date of the project\'s last event if present' do
-        last_activity_event = create(:event, project: project)
+        create(:event, project: project)
         expect(project.last_activity_at.to_i).to eq(last_event.created_at.to_i)
       end
 
@@ -152,11 +179,15 @@ describe Project do
 
   describe '#get_issue' do
     let(:project) { create(:empty_project) }
-    let(:issue)   { create(:issue, project: project) }
+    let!(:issue)  { create(:issue, project: project) }
 
     context 'with default issues tracker' do
       it 'returns an issue' do
         expect(project.get_issue(issue.iid)).to eq issue
+      end
+
+      it 'returns count of open issues' do
+        expect(project.open_issues_count).to eq(1)
       end
 
       it 'returns nil when no issue found' do
@@ -220,6 +251,7 @@ describe Project do
       end
 
       it { expect(Project.find_with_namespace('gitlab/gitlabhq')).to eq(@project) }
+      it { expect(Project.find_with_namespace('GitLab/GitlabHQ')).to eq(@project) }
       it { expect(Project.find_with_namespace('gitlab-ci')).to be_nil }
     end
   end
@@ -344,17 +376,6 @@ describe Project do
       expect(project1.star_count).to eq(0)
       expect(project2.star_count).to eq(0)
     end
-
-    it 'is decremented when an upvoter account is deleted' do
-      user = create :user
-      project = create :project, :public
-      user.toggle_star(project)
-      project.reload
-      expect(project.star_count).to eq(1)
-      user.destroy
-      project.reload
-      expect(project.star_count).to eq(0)
-    end
   end
 
   describe :avatar_type do
@@ -399,6 +420,230 @@ describe Project do
       end
 
       it { should eq "http://localhost#{avatar_path}" }
+    end
+  end
+
+  describe :ci_commit do
+    let(:project) { create :project }
+    let(:commit) { create :ci_commit, project: project }
+
+    it { expect(project.ci_commit(commit.sha)).to eq(commit) }
+  end
+
+  describe :builds_enabled do
+    let(:project) { create :project }
+
+    before { project.builds_enabled = true }
+
+    subject { project.builds_enabled }
+
+    it { expect(project.builds_enabled?).to be_truthy }
+  end
+
+  describe '.trending' do
+    let(:group)    { create(:group) }
+    let(:project1) { create(:empty_project, :public, group: group) }
+    let(:project2) { create(:empty_project, :public, group: group) }
+
+    before do
+      2.times do
+        create(:note_on_commit, project: project1)
+      end
+
+      create(:note_on_commit, project: project2)
+    end
+
+    describe 'without an explicit start date' do
+      subject { described_class.trending.to_a }
+
+      it 'sorts Projects by the amount of notes in descending order' do
+        expect(subject).to eq([project1, project2])
+      end
+    end
+
+    describe 'with an explicit start date' do
+      let(:date) { 2.months.ago }
+
+      subject { described_class.trending(date).to_a }
+
+      before do
+        2.times do
+          # Little fix for special issue related to Fractional Seconds support for MySQL.
+          # See: https://github.com/rails/rails/pull/14359/files
+          create(:note_on_commit, project: project2, created_at: date + 1)
+        end
+      end
+
+      it 'sorts Projects by the amount of notes in descending order' do
+        expect(subject).to eq([project2, project1])
+      end
+    end
+  end
+
+  describe '.visible_to_user' do
+    let!(:project) { create(:project, :private) }
+    let!(:user)    { create(:user) }
+
+    subject { described_class.visible_to_user(user) }
+
+    describe 'when a user has access to a project' do
+      before do
+        project.team.add_user(user, Gitlab::Access::MASTER)
+      end
+
+      it { is_expected.to eq([project]) }
+    end
+
+    describe 'when a user does not have access to any projects' do
+      it { is_expected.to eq([]) }
+    end
+  end
+
+  context 'shared runners by default' do
+    let(:project) { create(:empty_project) }
+
+    subject { project.shared_runners_enabled }
+
+    context 'are enabled' do
+      before { stub_application_setting(shared_runners_enabled: true) }
+
+      it { is_expected.to be_truthy }
+    end
+
+    context 'are disabled' do
+      before { stub_application_setting(shared_runners_enabled: false) }
+
+      it { is_expected.to be_falsey }
+    end
+  end
+
+  describe :any_runners do
+    let(:project) { create(:empty_project, shared_runners_enabled: shared_runners_enabled) }
+    let(:specific_runner) { create(:ci_runner) }
+    let(:shared_runner) { create(:ci_runner, :shared) }
+
+    context 'for shared runners disabled' do
+      let(:shared_runners_enabled) { false }
+
+      it 'there are no runners available' do
+        expect(project.any_runners?).to be_falsey
+      end
+
+      it 'there is a specific runner' do
+        project.runners << specific_runner
+        expect(project.any_runners?).to be_truthy
+      end
+
+      it 'there is a shared runner, but they are prohibited to use' do
+        shared_runner
+        expect(project.any_runners?).to be_falsey
+      end
+
+      it 'checks the presence of specific runner' do
+        project.runners << specific_runner
+        expect(project.any_runners? { |runner| runner == specific_runner }).to be_truthy
+      end
+    end
+
+    context 'for shared runners enabled' do
+      let(:shared_runners_enabled) { true }
+
+      it 'there is a shared runner' do
+        shared_runner
+        expect(project.any_runners?).to be_truthy
+      end
+
+      it 'checks the presence of shared runner' do
+        shared_runner
+        expect(project.any_runners? { |runner| runner == shared_runner }).to be_truthy
+      end
+    end
+  end
+
+  describe '#visibility_level_allowed?' do
+    let(:project) { create(:project, :internal) }
+
+    context 'when checking on non-forked project' do
+      it { expect(project.visibility_level_allowed?(Gitlab::VisibilityLevel::PRIVATE)).to be_truthy }
+      it { expect(project.visibility_level_allowed?(Gitlab::VisibilityLevel::INTERNAL)).to be_truthy }
+      it { expect(project.visibility_level_allowed?(Gitlab::VisibilityLevel::PUBLIC)).to be_truthy }
+    end
+
+    context 'when checking on forked project' do
+      let(:forked_project) { create :forked_project_with_submodules }
+
+      before do
+        forked_project.build_forked_project_link(forked_to_project_id: forked_project.id, forked_from_project_id: project.id)
+        forked_project.save
+      end
+
+      it { expect(forked_project.visibility_level_allowed?(Gitlab::VisibilityLevel::PRIVATE)).to be_truthy }
+      it { expect(forked_project.visibility_level_allowed?(Gitlab::VisibilityLevel::INTERNAL)).to be_truthy }
+      it { expect(forked_project.visibility_level_allowed?(Gitlab::VisibilityLevel::PUBLIC)).to be_falsey }
+    end
+
+  end
+
+  describe '#rename_repo' do
+    let(:project) { create(:project) }
+    let(:gitlab_shell) { Gitlab::Shell.new }
+
+    before do
+      # Project#gitlab_shell returns a new instance of Gitlab::Shell on every
+      # call. This makes testing a bit easier.
+      allow(project).to receive(:gitlab_shell).and_return(gitlab_shell)
+    end
+
+    it 'renames a repository' do
+      allow(project).to receive(:previous_changes).and_return('path' => ['foo'])
+
+      ns = project.namespace_dir
+
+      expect(gitlab_shell).to receive(:mv_repository).
+        ordered.
+        with("#{ns}/foo", "#{ns}/#{project.path}").
+        and_return(true)
+
+      expect(gitlab_shell).to receive(:mv_repository).
+        ordered.
+        with("#{ns}/foo.wiki", "#{ns}/#{project.path}.wiki").
+        and_return(true)
+
+      expect_any_instance_of(SystemHooksService).
+        to receive(:execute_hooks_for).
+        with(project, :rename)
+
+      expect_any_instance_of(Gitlab::UploadsTransfer).
+        to receive(:rename_project).
+        with('foo', project.path, ns)
+
+      expect(project).to receive(:expire_caches_before_rename)
+
+      project.rename_repo
+    end
+  end
+
+  describe '#expire_caches_before_rename' do
+    let(:project) { create(:project) }
+    let(:repo)    { double(:repo, exists?: true) }
+    let(:wiki)    { double(:wiki, exists?: true) }
+
+    it 'expires the caches of the repository and wiki' do
+      allow(Repository).to receive(:new).
+        with('foo', project).
+        and_return(repo)
+
+      allow(Repository).to receive(:new).
+        with('foo.wiki', project).
+        and_return(wiki)
+
+      expect(repo).to receive(:expire_cache)
+      expect(repo).to receive(:expire_emptiness_caches)
+
+      expect(wiki).to receive(:expire_cache)
+      expect(wiki).to receive(:expire_emptiness_caches)
+
+      project.expire_caches_before_rename('foo')
     end
   end
 end

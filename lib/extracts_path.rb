@@ -111,7 +111,7 @@ module ExtractsPath
                                                       @project, @ref, @path)
 
   rescue RuntimeError, NoMethodError, InvalidPathError
-    not_found!
+    render_404
   end
 
   def tree

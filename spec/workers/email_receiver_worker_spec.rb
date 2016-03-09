@@ -5,7 +5,7 @@ describe EmailReceiverWorker do
 
   context "when reply by email is enabled" do
     before do
-      allow(Gitlab::ReplyByEmail).to receive(:enabled?).and_return(true)
+      allow(Gitlab::IncomingEmail).to receive(:enabled?).and_return(true)
     end
 
     it "calls the email receiver" do
@@ -21,19 +21,21 @@ describe EmailReceiverWorker do
       end
 
       it "sends out a rejection email" do
-        described_class.new.perform(raw_message)
+        perform_enqueued_jobs do
+          described_class.new.perform(raw_message)
 
-        email = ActionMailer::Base.deliveries.last
-        expect(email).not_to be_nil
-        expect(email.to).to eq(["jake@adventuretime.ooo"])
-        expect(email.subject).to include("Rejected")
+          email = ActionMailer::Base.deliveries.last
+          expect(email).not_to be_nil
+          expect(email.to).to eq(["jake@adventuretime.ooo"])
+          expect(email.subject).to include("Rejected")
+        end
       end
     end
   end
 
   context "when reply by email is disabled" do
     before do
-      allow(Gitlab::ReplyByEmail).to receive(:enabled?).and_return(false)
+      allow(Gitlab::IncomingEmail).to receive(:enabled?).and_return(false)
     end
 
     it "doesn't call the email receiver" do

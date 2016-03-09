@@ -22,19 +22,17 @@ class Namespace < ActiveRecord::Base
 
   validates :owner, presence: true, unless: ->(n) { n.type == "Group" }
   validates :name,
-    presence: true, uniqueness: true,
     length: { within: 0..255 },
-    format: { with: Gitlab::Regex.namespace_name_regex,
-              message: Gitlab::Regex.namespace_name_regex_message }
+    namespace_name: true,
+    presence: true,
+    uniqueness: true
 
   validates :description, length: { within: 0..255 }
   validates :path,
-    uniqueness: { case_sensitive: false },
-    presence: true,
     length: { within: 1..255 },
-    exclusion: { in: Gitlab::Blacklist.path },
-    format: { with: Gitlab::Regex.namespace_regex,
-              message: Gitlab::Regex.namespace_regex_message }
+    namespace: true,
+    presence: true,
+    uniqueness: { case_sensitive: false }
 
   delegate :name, to: :owner, allow_nil: true, prefix: true
 
@@ -46,7 +44,7 @@ class Namespace < ActiveRecord::Base
 
   class << self
     def by_path(path)
-      where('lower(path) = :value', value: path.downcase).first
+      find_by('lower(path) = :value', value: path.downcase)
     end
 
     # Case insensetive search for namespace by path or name
@@ -118,6 +116,8 @@ class Namespace < ActiveRecord::Base
     gitlab_shell.add_namespace(path_was)
 
     if gitlab_shell.mv_namespace(path_was, path)
+      Gitlab::UploadsTransfer.new.rename_namespace(path_was, path)
+
       # If repositories moved successfully we need to
       # send update instructions to users.
       # However we cannot allow rollback since we moved namespace dir
@@ -137,7 +137,9 @@ class Namespace < ActiveRecord::Base
   end
 
   def send_update_instructions
-    projects.each(&:send_move_instructions)
+    projects.each do |project|
+      project.send_move_instructions("#{path_was}/#{project.path}")
+    end
   end
 
   def kind
@@ -145,6 +147,6 @@ class Namespace < ActiveRecord::Base
   end
 
   def find_fork_of(project)
-    projects.joins(:forked_project_link).where('forked_project_links.forked_from_project_id = ?', project.id).first
+    projects.joins(:forked_project_link).find_by('forked_project_links.forked_from_project_id = ?', project.id)
   end
 end

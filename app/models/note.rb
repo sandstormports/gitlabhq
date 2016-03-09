@@ -15,40 +15,52 @@
 #  noteable_id   :integer
 #  system        :boolean          default(FALSE), not null
 #  st_diff       :text
+#  updated_by_id :integer
+#  is_award      :boolean          default(FALSE), not null
 #
 
 require 'carrierwave/orm/activerecord'
 require 'file_size_validator'
 
 class Note < ActiveRecord::Base
-  include Mentionable
   include Gitlab::CurrentSettings
   include Participable
+  include Mentionable
 
   default_value_for :system, false
 
-  attr_mentionable :note
-  participant :author, :mentioned_users
+  attr_mentionable :note, cache: true, pipeline: :note
+  participant :author
 
   belongs_to :project
-  belongs_to :noteable, polymorphic: true
+  belongs_to :noteable, polymorphic: true, touch: true
   belongs_to :author, class_name: "User"
   belongs_to :updated_by, class_name: "User"
 
+  has_many :todos, dependent: :destroy
+
+  delegate :gfm_reference, :local_reference, to: :noteable
   delegate :name, to: :project, prefix: true
   delegate :name, :email, to: :author, prefix: true
 
+  before_validation :set_award!
+
   validates :note, :project, presence: true
-  validates :line_code, format: { with: /\A[a-z0-9]+_\d+_\d+\Z/ }, allow_blank: true
+  validates :note, uniqueness: { scope: [:author, :noteable_type, :noteable_id] }, if: ->(n) { n.is_award }
+  validates :note, inclusion: { in: Emoji.emojis_names }, if: ->(n) { n.is_award }
+  validates :line_code, line_code: true, allow_blank: true
   # Attachments are deprecated and are handled by Markdown uploader
   validates :attachment, file_size: { maximum: :max_attachment_size }
 
   validates :noteable_id, presence: true, if: ->(n) { n.noteable_type.present? && n.noteable_type != 'Commit' }
   validates :commit_id, presence: true, if: ->(n) { n.noteable_type == 'Commit' }
+  validates :author, presence: true
 
   mount_uploader :attachment, AttachmentUploader
 
   # Scopes
+  scope :awards, ->{ where(is_award: true) }
+  scope :nonawards, ->{ where(is_award: false) }
   scope :for_commit_id, ->(commit_id) { where(noteable_type: "Commit", commit_id: commit_id) }
   scope :inline, ->{ where("line_code IS NOT NULL") }
   scope :not_inline, ->{ where(line_code: [nil, '']) }
@@ -59,9 +71,13 @@ class Note < ActiveRecord::Base
   scope :inc_author_project, ->{ includes(:project, :author) }
   scope :inc_author, ->{ includes(:author) }
 
+  scope :with_associations, -> do
+    includes(:author, :noteable, :updated_by,
+             project: [:project_members, { group: [:group_members] }])
+  end
+
   serialize :st_diff
   before_create :set_diff, if: ->(n) { n.line_code.present? }
-  after_update :set_references
 
   class << self
     def discussions_from_notes(notes)
@@ -72,7 +88,7 @@ class Note < ActiveRecord::Base
         next if discussion_ids.include?(note.discussion_id)
 
         # don't group notes for the main target
-        if !note.for_diff_line? && note.noteable_type == "MergeRequest"
+        if !note.for_diff_line? && note.for_merge_request?
           discussions << [note]
         else
           discussions << notes.select do |other_note|
@@ -92,6 +108,19 @@ class Note < ActiveRecord::Base
     def search(query)
       where("LOWER(note) like :query", query: "%#{query.downcase}%")
     end
+
+    def grouped_awards
+      notes = {}
+
+      awards.select(:note).distinct.map do |note|
+        notes[note.note] = where(note: note.note)
+      end
+
+      notes["thumbsup"] ||= Note.none
+      notes["thumbsdown"] ||= Note.none
+
+      notes
+    end
   end
 
   def cross_reference?
@@ -103,9 +132,11 @@ class Note < ActiveRecord::Base
   end
 
   def find_diff
-    return nil unless noteable && noteable.diffs.present?
+    return nil unless noteable
+    return @diff if defined?(@diff)
 
-    @diff ||= noteable.diffs.find do |d|
+    # Don't use ||= because nil is a valid value for @diff
+    @diff = noteable.diffs(Commit.max_diff_options).find do |d|
       Digest::SHA1.hexdigest(d.new_path) == diff_file_index if d.new_path
     end
   end
@@ -137,20 +168,16 @@ class Note < ActiveRecord::Base
   def active?
     return true unless self.diff
     return false unless noteable
+    return @active if defined?(@active)
 
-    noteable.diffs.each do |mr_diff|
-      next unless mr_diff.new_path == self.diff.new_path
+    diffs = noteable.diffs(Commit.max_diff_options)
+    notable_diff = diffs.find { |d| d.new_path == self.diff.new_path }
 
-      lines = Gitlab::Diff::Parser.new.parse(mr_diff.diff.lines.to_a)
+    return @active = false if notable_diff.nil?
 
-      lines.each do |line|
-        if line.text == diff_line
-          return true
-        end
-      end
-    end
-
-    false
+    parsed_lines = Gitlab::Diff::Parser.new.parse(notable_diff.diff.each_line)
+    # We cannot use ||= because @active may be false
+    @active = parsed_lines.any? { |line_obj| line_obj.text == diff_line }
   end
 
   def outdated?
@@ -218,7 +245,7 @@ class Note < ActiveRecord::Base
     prev_match_line = nil
     prev_lines = []
 
-    diff_lines.each do |line|
+    highlighted_diff_lines.each do |line|
       if line.type == "match"
         prev_lines.clear
         prev_match_line = line
@@ -235,7 +262,11 @@ class Note < ActiveRecord::Base
   end
 
   def diff_lines
-    @diff_lines ||= Gitlab::Diff::Parser.new.parse(diff.diff.lines.to_a)
+    @diff_lines ||= Gitlab::Diff::Parser.new.parse(diff.diff.each_line)
+  end
+
+  def highlighted_diff_lines
+    Gitlab::Diff::Highlight.new(diff_lines).highlight
   end
 
   def discussion_id
@@ -283,64 +314,10 @@ class Note < ActiveRecord::Base
     nil
   end
 
-  DOWNVOTES = %w(-1 :-1: :thumbsdown: :thumbs_down_sign:)
-
-  # Check if the note is a downvote
-  def downvote?
-    votable? && note.start_with?(*DOWNVOTES)
-  end
-
-  UPVOTES = %w(+1 :+1: :thumbsup: :thumbs_up_sign:)
-
-  # Check if the note is an upvote
-  def upvote?
-    votable? && note.start_with?(*UPVOTES)
-  end
-
-  def superceded?(notes)
-    return false unless vote?
-
-    notes.each do |note|
-      next if note == self
-
-      if note.vote? &&
-        self[:author_id] == note[:author_id] &&
-        self[:created_at] <= note[:created_at]
-        return true
-      end
-    end
-
-    false
-  end
-
-  def vote?
-    upvote? || downvote?
-  end
-
-  def votable?
-    for_issue? || (for_merge_request? && !for_diff_line?)
-  end
-
-  # Mentionable override.
-  def gfm_reference(from_project = nil)
-    noteable.gfm_reference(from_project)
-  end
-
-  # Mentionable override.
-  def local_reference
-    noteable
-  end
-
-  def noteable_type_name
-    if noteable_type.present?
-      noteable_type.downcase
-    end
-  end
-
   # FIXME: Hack for polymorphic associations with STI
   #        For more information visit http://api.rubyonrails.org/classes/ActiveRecord/Associations/ClassMethods.html#label-Polymorphic+Associations
-  def noteable_type=(sType)
-    super(sType.to_s.classify.constantize.base_class.to_s)
+  def noteable_type=(noteable_type)
+    super(noteable_type.to_s.classify.constantize.base_class.to_s)
   end
 
   # Reset notes events cache
@@ -356,15 +333,48 @@ class Note < ActiveRecord::Base
     Event.reset_event_cache_for(self)
   end
 
-  def set_references
-    create_new_cross_references!(project, author)
+  def downvote?
+    is_award && note == "thumbsdown"
   end
 
-  def system?
-    read_attribute(:system)
+  def upvote?
+    is_award && note == "thumbsup"
   end
 
   def editable?
-    !read_attribute(:system)
+    !system? && !is_award
+  end
+
+  def cross_reference_not_visible_for?(user)
+    cross_reference? && referenced_mentionables(user).empty?
+  end
+
+  # Checks if note is an award added as a comment
+  #
+  # If note is an award, this method sets is_award to true
+  #   and changes content of the note to award name.
+  #
+  # Method is executed as a before_validation callback.
+  #
+  def set_award!
+    return unless awards_supported? && contains_emoji_only?
+
+    self.is_award = true
+    self.note = award_emoji_name
+  end
+
+  private
+
+  def awards_supported?
+    (for_issue? || for_merge_request?) && !for_diff_line?
+  end
+
+  def contains_emoji_only?
+    note =~ /\A#{Banzai::Filter::EmojiFilter.emoji_pattern}\s?\Z/
+  end
+
+  def award_emoji_name
+    original_name = note.match(Banzai::Filter::EmojiFilter.emoji_pattern)[1]
+    AwardEmoji.normilize_emoji_name(original_name)
   end
 end

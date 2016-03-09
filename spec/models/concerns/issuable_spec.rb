@@ -2,6 +2,7 @@ require 'spec_helper'
 
 describe Issue, "Issuable" do
   let(:issue) { create(:issue) }
+  let(:user) { create(:user) }
 
   describe "Associations" do
     it { is_expected.to belong_to(:project) }
@@ -64,6 +65,63 @@ describe Issue, "Issuable" do
       allow(issue).to receive(:today?).and_return(true)
       issue.touch
       expect(issue.new?).to be_falsey
+    end
+  end
+
+  describe "#to_hook_data" do
+    let(:data) { issue.to_hook_data(user) }
+    let(:project) { issue.project }
+
+
+    it "returns correct hook data" do
+      expect(data[:object_kind]).to eq("issue")
+      expect(data[:user]).to eq(user.hook_attrs)
+      expect(data[:object_attributes]).to eq(issue.hook_attrs)
+      expect(data).to_not have_key(:assignee)
+    end
+
+    context "issue is assigned" do
+      before { issue.update_attribute(:assignee, user) }
+
+      it "returns correct hook data" do
+        expect(data[:object_attributes]['assignee_id']).to eq(user.id)
+        expect(data[:assignee]).to eq(user.hook_attrs)
+      end
+    end
+
+    include_examples 'project hook data'
+    include_examples 'deprecated repository hook data'
+  end
+
+  describe '#card_attributes' do
+    it 'includes the author name' do
+      allow(issue).to receive(:author).and_return(double(name: 'Robert'))
+      allow(issue).to receive(:assignee).and_return(nil)
+
+      expect(issue.card_attributes).
+        to eq({ 'Author' => 'Robert', 'Assignee' => nil })
+    end
+
+    it 'includes the assignee name' do
+      allow(issue).to receive(:author).and_return(double(name: 'Robert'))
+      allow(issue).to receive(:assignee).and_return(double(name: 'Douwe'))
+
+      expect(issue.card_attributes).
+        to eq({ 'Author' => 'Robert', 'Assignee' => 'Douwe' })
+    end
+  end
+
+  describe "votes" do
+    before do
+      author = create :user
+      project = create :empty_project
+      issue.notes.awards.create!(note: "thumbsup", author: author, project: project)
+      issue.notes.awards.create!(note: "thumbsdown", author: author, project: project)
+    end
+
+    it "returns correct values" do
+      expect(issue.upvotes).to eq(1)
+      expect(issue.downvotes).to eq(1)
     end
   end
 end

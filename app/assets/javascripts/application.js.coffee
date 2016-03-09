@@ -5,32 +5,32 @@
 # the compiled file.
 #
 #= require jquery
-#= require jquery.ui.all
+#= require jquery-ui/autocomplete
+#= require jquery-ui/datepicker
+#= require jquery-ui/effect-highlight
+#= require jquery-ui/sortable
 #= require jquery_ujs
 #= require jquery.cookie
 #= require jquery.endless-scroll
 #= require jquery.highlight
-#= require jquery.history
 #= require jquery.waitforimages
 #= require jquery.atwho
 #= require jquery.scrollTo
-#= require jquery.blockUI
 #= require jquery.turbolinks
+#= require d3
+#= require cal-heatmap
 #= require turbolinks
 #= require autosave
 #= require bootstrap
 #= require select2
 #= require raphael
-#= require g.raphael-min
-#= require g.bar-min
-#= require chart-lib.min
+#= require g.raphael
+#= require g.bar
+#= require Chart
 #= require branch-graph
 #= require ace/ace
 #= require ace/ext-searchbox
-#= require d3
 #= require underscore
-#= require nprogress
-#= require nprogress-turbolinks
 #= require dropzone
 #= require mousetrap
 #= require mousetrap/pause
@@ -39,9 +39,10 @@
 #= require shortcuts_dashboard_navigation
 #= require shortcuts_issuable
 #= require shortcuts_network
-#= require cal-heatmap
-#= require jquery.nicescroll.min
+#= require jquery.nicescroll
 #= require_tree .
+#= require fuzzaldrin-plus
+#= require cropper.js
 
 window.slugify = (text) ->
   text.replace(/[^-a-zA-Z0-9]+/g, '_').toLowerCase()
@@ -94,15 +95,17 @@ window.unbindEvents = ->
   $(document).off('scroll')
 
 window.shiftWindow = ->
-  scrollBy 0, -50
+  scrollBy 0, -100
 
 document.addEventListener("page:fetch", unbindEvents)
 
-# Scroll the window to avoid the topnav bar
-# https://github.com/twitter/bootstrap/issues/1768
-if location.hash
-  setTimeout shiftWindow, 1
 window.addEventListener "hashchange", shiftWindow
+
+window.onload = ->
+  # Scroll the window to avoid the topnav bar
+  # https://github.com/twitter/bootstrap/issues/1768
+  if location.hash
+    setTimeout shiftWindow, 100
 
 $ ->
   $(".nicescroll").niceScroll(cursoropacitymax: '0.4', cursorcolor: '#FFF', cursorborder: "1px solid #FFF")
@@ -116,6 +119,12 @@ $ ->
   $('.remove-row').bind 'ajax:success', ->
     $(this).closest('li').fadeOut()
 
+  $('.js-remove-tr').bind 'ajax:before', ->
+    $(this).hide()
+
+  $('.js-remove-tr').bind 'ajax:success', ->
+    $(this).closest('tr').fadeOut()
+
   # Initialize select2 selects
   $('select.select2').select2(width: 'resolve', dropdownAutoWidth: true)
 
@@ -127,17 +136,25 @@ $ ->
     ), 1
 
   # Initialize tooltips
-  $('body').tooltip({
-    selector: '.has_tooltip, [data-toggle="tooltip"], .page-sidebar-collapsed .nav-sidebar a'
+  $('body').tooltip(
+    selector: '.has_tooltip, [data-toggle="tooltip"]'
     placement: (_, el) ->
       $el = $(el)
-      if $el.attr('id') == 'js-shortcuts-home'
-        # Place the logo tooltip on the right when collapsed, bottom when expanded
-        $el.parents('header').hasClass('header-collapsed') and 'right' or 'bottom'
-      else
-        # Otherwise use the data-placement attribute, or 'bottom' if undefined
-        $el.data('placement') or 'bottom'
-  })
+      $el.data('placement') || 'bottom'
+  )
+
+  $('.header-logo .home').tooltip(
+    placement: (_, el) ->
+      $el = $(el)
+      if $('.page-with-sidebar').hasClass('page-sidebar-collapsed') then 'right' else 'bottom'
+    container: 'body'
+  )
+
+  $('.page-with-sidebar').tooltip(
+    selector: '.sidebar-collapsed .nav-sidebar a, .sidebar-collapsed a.sidebar-user'
+    placement: 'right'
+    container: 'body'
+  )
 
   # Form submitter
   $('.trigger-submit').on 'change', ->
@@ -172,6 +189,7 @@ $ ->
   $('.navbar-toggle').on 'click', ->
     $('.header-content .title').toggle()
     $('.header-content .navbar-collapse').toggle()
+    $('.navbar-toggle').toggleClass('active')
 
   # Show/hide comments on diff
   $("body").on "click", ".js-toggle-diff-comments", (e) ->
@@ -187,4 +205,94 @@ $ ->
     form = btn.closest("form")
     new ConfirmDangerModal(form, text)
 
+  $('input[type="search"]').each ->
+    $this = $(this)
+    $this.attr 'value', $this.val()
+    return
+
+  $(document)
+    .off 'keyup', 'input[type="search"]'
+    .on 'keyup', 'input[type="search"]' , (e) ->
+      $this = $(this)
+      $this.attr 'value', $this.val()
+
+  $(document)
+    .off 'breakpoint:change'
+    .on 'breakpoint:change', (e, breakpoint) ->
+      if breakpoint is 'sm' or breakpoint is 'xs'
+        $gutterIcon = $('aside .gutter-toggle').find('i')
+        if $gutterIcon.hasClass('fa-angle-double-right')
+          $gutterIcon.closest('a').trigger('click')
+
+  $(document)
+    .off 'click', 'aside .gutter-toggle'
+    .on 'click', 'aside .gutter-toggle', (e, triggered) ->
+      e.preventDefault()
+      $this = $(this)
+      $thisIcon = $this.find 'i'
+      $allGutterToggleIcons = $('.gutter-toggle i')
+      if $thisIcon.hasClass('fa-angle-double-right')
+        $allGutterToggleIcons
+          .removeClass('fa-angle-double-right')
+          .addClass('fa-angle-double-left')
+        $('aside.right-sidebar')
+          .removeClass('right-sidebar-expanded')
+          .addClass('right-sidebar-collapsed')
+        $('.page-with-sidebar')
+          .removeClass('right-sidebar-expanded')
+          .addClass('right-sidebar-collapsed')
+      else
+        $allGutterToggleIcons
+          .removeClass('fa-angle-double-left')
+          .addClass('fa-angle-double-right')
+        $('aside.right-sidebar')
+          .removeClass('right-sidebar-collapsed')
+          .addClass('right-sidebar-expanded')
+        $('.page-with-sidebar')
+          .removeClass('right-sidebar-collapsed')
+          .addClass('right-sidebar-expanded')
+      if not triggered
+        $.cookie("collapsed_gutter",
+          $('.right-sidebar')
+            .hasClass('right-sidebar-collapsed'), { path: '/' })
+
+  bootstrapBreakpoint = undefined;
+  checkBootstrapBreakpoints = ->
+    if $('.device-xs').is(':visible')
+      bootstrapBreakpoint = "xs"
+    else if $('.device-sm').is(':visible')
+      bootstrapBreakpoint = "sm"
+    else if $('.device-md').is(':visible')
+      bootstrapBreakpoint = "md"
+    else if $('.device-lg').is(':visible')
+      bootstrapBreakpoint = "lg"
+
+  setBootstrapBreakpoints = ->
+    if $('.device-xs').length
+      return
+
+    $("body")
+      .append('<div class="device-xs visible-xs"></div>'+
+        '<div class="device-sm visible-sm"></div>'+
+        '<div class="device-md visible-md"></div>'+
+        '<div class="device-lg visible-lg"></div>')
+    checkBootstrapBreakpoints()
+
+  fitSidebarForSize = ->
+    oldBootstrapBreakpoint = bootstrapBreakpoint
+    checkBootstrapBreakpoints()
+    if bootstrapBreakpoint != oldBootstrapBreakpoint
+      $(document).trigger('breakpoint:change', [bootstrapBreakpoint])
+
+  checkInitialSidebarSize = ->
+    if bootstrapBreakpoint is "xs" or "sm"
+      $(document).trigger('breakpoint:change', [bootstrapBreakpoint])
+
+  $(window)
+    .off "resize"
+    .on "resize", (e) ->
+      fitSidebarForSize()
+
+  setBootstrapBreakpoints()
+  checkInitialSidebarSize()
   new Aside()

@@ -4,8 +4,11 @@ class Admin::AbuseReportsController < Admin::ApplicationController
   end
 
   def destroy
-    AbuseReport.find(params[:id]).destroy
+    abuse_report = AbuseReport.find(params[:id])
 
-    redirect_to admin_abuse_reports_path, notice: 'Report was removed'
+    abuse_report.remove_user if params[:remove_user]
+    abuse_report.destroy
+
+    render nothing: true
   end
 end

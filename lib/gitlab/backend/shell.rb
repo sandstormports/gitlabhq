@@ -1,10 +1,11 @@
 module Gitlab
   class Shell
-    class AccessDenied < StandardError; end
+    class Error < StandardError; end
 
-    class KeyAdder < Struct.new(:io)
+    KeyAdder = Struct.new(:io) do
       def add_key(id, key)
-        io.puts("#{id}\t#{key.strip}")
+        key.gsub!(/[[:space:]]+/, ' ').strip!
+        io.puts("#{id}\t#{key}")
       end
     end
 
@@ -35,8 +36,9 @@ module Gitlab
     #   import_repository("gitlab/gitlab-ci", "https://github.com/randx/six.git")
     #
     def import_repository(name, url)
-      Gitlab::Utils.system_silent([gitlab_shell_projects_path, 'import-project',
-                                   "#{name}.git", url, '240'])
+      output, status = Popen::popen([gitlab_shell_projects_path, 'import-project', "#{name}.git", url, '900'])
+      raise Error, output unless status.zero?
+      true
     end
 
     # Move repository
@@ -45,7 +47,7 @@ module Gitlab
     # new_path - new project path with namespace
     #
     # Ex.
-    #   mv_repository("gitlab/gitlab-ci", "randx/gitlab-ci-new.git")
+    #   mv_repository("gitlab/gitlab-ci", "randx/gitlab-ci-new")
     #
     def mv_repository(path, new_path)
       Gitlab::Utils.system_silent([gitlab_shell_projects_path, 'mv-project',
@@ -146,6 +148,18 @@ module Gitlab
     def rm_tag(path, tag_name)
       Gitlab::Utils.system_silent([gitlab_shell_projects_path, 'rm-tag',
                                    "#{path}.git", tag_name])
+    end
+
+    # Gc repository
+    #
+    # path - project path with namespace
+    #
+    # Ex.
+    #   gc("gitlab/gitlab-ci")
+    #
+    def gc(path)
+      Gitlab::Utils.system_silent([gitlab_shell_projects_path, 'gc',
+                                   "#{path}.git"])
     end
 
     # Add new key to gitlab-shell

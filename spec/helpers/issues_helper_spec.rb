@@ -117,4 +117,35 @@ describe IssuesHelper do
     end
   end
 
+  describe "#merge_requests_sentence" do
+    subject { merge_requests_sentence(merge_requests)}
+    let(:merge_requests) do
+      [ build(:merge_request, iid: 1), build(:merge_request, iid: 2),
+        build(:merge_request, iid: 3)]
+    end
+
+    it { is_expected.to eq("!1, !2, or !3") }
+  end
+
+  describe "#note_active_class" do
+    before do
+      @note = create :note
+      @note1 = create :note
+    end
+
+    it "returns empty string for unauthenticated user" do
+      expect(note_active_class(Note.all, nil)).to eq("")
+    end
+
+    it "returns active string for author" do
+      expect(note_active_class(Note.all, @note.author)).to eq("active")
+    end
+  end
+
+  describe "#awards_sort" do
+    it "sorts a hash so thumbsup and thumbsdown are always on top" do
+      data = { "thumbsdown" => "some value", "lifter" => "some value", "thumbsup" => "some value" }
+      expect(awards_sort(data).keys).to eq(["thumbsup", "thumbsdown", "lifter"])
+    end
+  end
 end

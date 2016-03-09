@@ -1,6 +1,6 @@
 require "spec_helper"
 
-describe ProjectTeam do
+describe ProjectTeam, models: true do
   let(:master) { create(:user) }
   let(:reporter) { create(:user) }
   let(:guest) { create(:user) }
@@ -64,6 +64,28 @@ describe ProjectTeam do
       it { expect(project.team.master?(nonmember)).to be_falsey }
       it { expect(project.team.member?(nonmember)).to be_falsey }
       it { expect(project.team.member?(guest)).to be_truthy }
+    end
+  end
+
+  describe "#human_max_access" do
+    it 'returns Master role' do
+      user = create(:user)
+      group = create(:group)
+      group.add_master(user)
+
+      project = build_stubbed(:empty_project, namespace: group)
+
+      expect(project.team.human_max_access(user.id)).to eq 'Master'
+    end
+
+    it 'returns Owner role' do
+      user = create(:user)
+      group = create(:group)
+      group.add_owner(user)
+
+      project = build_stubbed(:empty_project, namespace: group)
+
+      expect(project.team.human_max_access(user.id)).to eq 'Owner'
     end
   end
 end

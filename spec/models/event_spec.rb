@@ -16,7 +16,7 @@
 
 require 'spec_helper'
 
-describe Event do
+describe Event, models: true do
   describe "Associations" do
     it { is_expected.to belong_to(:project) }
     it { is_expected.to belong_to(:target) }
@@ -63,5 +63,22 @@ describe Event do
     it { expect(@event.tag?).to be_falsey }
     it { expect(@event.branch_name).to eq("master") }
     it { expect(@event.author).to eq(@user) }
+  end
+
+  describe '.limit_recent' do
+    let!(:event1) { create(:closed_issue_event) }
+    let!(:event2) { create(:closed_issue_event) }
+
+    describe 'without an explicit limit' do
+      subject { Event.limit_recent }
+
+      it { is_expected.to eq([event2, event1]) }
+    end
+
+    describe 'with an explicit limit' do
+      subject { Event.limit_recent(1) }
+
+      it { is_expected.to eq([event2]) }
+    end
   end
 end

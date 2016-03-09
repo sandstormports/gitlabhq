@@ -10,14 +10,13 @@
 #  created_at       :datetime
 #  updated_at       :datetime
 #  file_name        :string(255)
-#  expires_at       :datetime
 #  type             :string(255)
 #  visibility_level :integer          default(0), not null
 #
 
 require 'spec_helper'
 
-describe Snippet do
+describe Snippet, models: true do
   describe 'modules' do
     subject { described_class }
 

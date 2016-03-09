@@ -16,24 +16,55 @@ describe UsersController do
     context 'with rendered views' do
       render_views
 
-      it 'renders the show template' do
-        sign_in(user)
+      describe 'when logged in' do
+        before do
+          sign_in(user)
+        end
 
-        get :show, username: user.username
+        it 'renders the show template' do
+          get :show, username: user.username
 
-        expect(response).to be_success
-        expect(response).to render_template('show')
+          expect(response).to be_success
+          expect(response).to render_template('show')
+        end
+      end
+
+      describe 'when logged out' do
+        it 'renders the show template' do
+          get :show, username: user.username
+
+          expect(response).to be_success
+          expect(response).to render_template('show')
+        end
       end
     end
   end
 
   describe 'GET #calendar' do
+
     it 'renders calendar' do
       sign_in(user)
 
       get :calendar, username: user.username
 
       expect(response).to render_template('calendar')
+    end
+
+    context 'forked project' do
+      let!(:project) { create(:project) }
+      let!(:forked_project) { Projects::ForkService.new(project, user).execute }
+
+      before do
+        sign_in(user)
+        project.team << [user, :developer]
+        EventCreateService.new.push(project, user, [])
+        EventCreateService.new.push(forked_project, user, [])
+      end
+
+      it 'includes forked projects' do
+        get :calendar, username: user.username
+        expect(assigns(:contributions_calendar).projects.count).to eq(2)
+      end
     end
   end
 

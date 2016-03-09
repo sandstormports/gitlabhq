@@ -1,12 +1,27 @@
 # Web hooks
 
+_**Note:**
+Starting from GitLab 8.5:_
+
+- _the `repository` key is deprecated in favor of the `project` key_
+- _the `project.ssh_url` key is deprecated in favor of the `project.git_ssh_url` key_
+- _the `project.http_url` key is deprecated in favor of the `project.git_http_url` key_
+
 Project web hooks allow you to trigger an URL if new code is pushed or a new issue is created.
 
 You can configure web hooks to listen for specific events like pushes, issues or merge requests. GitLab will send a POST request with data to the web hook URL.
 
 Web hooks can be used to update an external issue tracker, trigger CI builds, update a backup mirror, or even deploy to your production server.
 
-If you send a web hook to an SSL endpoint [the certificate will not be verified](https://gitlab.com/gitlab-org/gitlab-ce/blob/ccd617e58ea71c42b6b073e692447d0fe3c00be6/app/models/web_hook.rb#L35) since many people use self-signed certificates.
+## SSL Verification
+
+By default, the SSL certificate of the webhook endpoint is verified based on
+an internal list of Certificate Authorities,
+which means the certificate cannot be self-signed.
+
+You can turn this off in the web hook settings in your GitLab projects.
+
+![SSL Verification](ssl.png)
 
 ## Push events
 
@@ -29,12 +44,29 @@ X-Gitlab-Event: Push Hook
   "user_id": 4,
   "user_name": "John Smith",
   "user_email": "john@example.com",
+  "user_avatar": "https://s.gravatar.com/avatar/d4c74594d841139328695756648b6bd6?s=8://s.gravatar.com/avatar/d4c74594d841139328695756648b6bd6?s=80",
   "project_id": 15,
-  "repository": {
+  "project":{
+    "name":"Diaspora",
+    "description":"",
+    "web_url":"http://example.com/mike/diaspora",
+    "avatar_url":null,
+    "git_ssh_url":"git@example.com:mike/diaspora.git",
+    "git_http_url":"http://example.com/mike/diaspora.git",
+    "namespace":"Mike",
+    "visibility_level":0,
+    "path_with_namespace":"mike/diaspora",
+    "default_branch":"master",
+    "homepage":"http://example.com/mike/diaspora",
+    "url":"git@example.com:mike/diasporadiaspora.git",
+    "ssh_url":"git@example.com:mike/diaspora.git",
+    "http_url":"http://example.com/mike/diaspora.git"
+  },
+  "repository":{
     "name": "Diaspora",
     "url": "git@example.com:mike/diasporadiaspora.git",
     "description": "",
-    "homepage": "http://example.com/mike/diaspora", 
+    "homepage": "http://example.com/mike/diaspora",
     "git_http_url":"http://example.com/mike/diaspora.git",
     "git_ssh_url":"git@example.com:mike/diaspora.git",
     "visibility_level":0
@@ -48,7 +80,10 @@ X-Gitlab-Event: Push Hook
       "author": {
         "name": "Jordi Mallach",
         "email": "jordi@softcatala.org"
-      }
+      },
+      "added": ["CHANGELOG"],
+      "modified": ["app/controller/application.rb"],
+      "removed": []
     },
     {
       "id": "da1560886d4f094c3e6c9ef40349f7d38b5d27d7",
@@ -58,7 +93,10 @@ X-Gitlab-Event: Push Hook
       "author": {
         "name": "GitLab dev user",
         "email": "gitlabdev@dv6700.(none)"
-      }
+      },
+      "added": ["CHANGELOG"],
+      "modified": ["app/controller/application.rb"],
+      "removed": []
     }
   ],
   "total_commits_count": 4
@@ -86,8 +124,25 @@ X-Gitlab-Event: Tag Push Hook
   "after": "82b3d5ae55f7080f1e6022629cdb57bfae7cccc7",
   "user_id": 1,
   "user_name": "John Smith",
+  "user_avatar": "https://s.gravatar.com/avatar/d4c74594d841139328695756648b6bd6?s=8://s.gravatar.com/avatar/d4c74594d841139328695756648b6bd6?s=80",
   "project_id": 1,
-  "repository": {
+  "project":{
+    "name":"Example",
+    "description":"",
+    "web_url":"http://example.com/jsmith/example",
+    "avatar_url":null,
+    "git_ssh_url":"git@example.com:jsmith/example.git",
+    "git_http_url":"http://example.com/jsmith/example.git",
+    "namespace":"Jsmith",
+    "visibility_level":0,
+    "path_with_namespace":"jsmith/example",
+    "default_branch":"master",
+    "homepage":"http://example.com/jsmith/example",
+    "url":"git@example.com:jsmith/example.git",
+    "ssh_url":"git@example.com:jsmith/example.git",
+    "http_url":"http://example.com/jsmith/example.git"
+  },
+  "repository":{
     "name": "jsmith",
     "url": "ssh://git@example.com/jsmith/example.git",
     "description": "",
@@ -121,6 +176,28 @@ X-Gitlab-Event: Issue Hook
     "username": "root",
     "avatar_url": "http://www.gravatar.com/avatar/e64c7d89f26bd1972efa854d13d7dd61?s=40\u0026d=identicon"
   },
+  "project":{
+    "name":"Gitlab Test",
+    "description":"Aut reprehenderit ut est.",
+    "web_url":"http://example.com/gitlabhq/gitlab-test",
+    "avatar_url":null,
+    "git_ssh_url":"git@example.com:gitlabhq/gitlab-test.git",
+    "git_http_url":"http://example.com/gitlabhq/gitlab-test.git",
+    "namespace":"GitlabHQ",
+    "visibility_level":20,
+    "path_with_namespace":"gitlabhq/gitlab-test",
+    "default_branch":"master",
+    "homepage":"http://example.com/gitlabhq/gitlab-test",
+    "url":"http://example.com/gitlabhq/gitlab-test.git",
+    "ssh_url":"git@example.com:gitlabhq/gitlab-test.git",
+    "http_url":"http://example.com/gitlabhq/gitlab-test.git"
+  },
+  "repository":{
+    "name": "Gitlab Test",
+    "url": "http://example.com/gitlabhq/gitlab-test.git",
+    "description": "Aut reprehenderit ut est.",
+    "homepage": "http://example.com/gitlabhq/gitlab-test"
+  },
   "object_attributes": {
     "id": 301,
     "title": "New API: create/update/delete file",
@@ -137,6 +214,11 @@ X-Gitlab-Event: Issue Hook
     "iid": 23,
     "url": "http://example.com/diaspora/issues/23",
     "action": "open"
+  },
+  "assignee": {
+    "name": "User1",
+    "username": "user1",
+    "avatar_url": "http://www.gravatar.com/avatar/e64c7d89f26bd1972efa854d13d7dd61?s=40\u0026d=identicon"
   }
 }
 ```
@@ -167,14 +249,30 @@ X-Gitlab-Event: Note Hook
 {
   "object_kind": "note",
   "user": {
-    "name": "Adminstrator",
+    "name": "Administrator",
     "username": "root",
     "avatar_url": "http://www.gravatar.com/avatar/e64c7d89f26bd1972efa854d13d7dd61?s=40\u0026d=identicon"
   },
   "project_id": 5,
-  "repository": {
+  "project":{
+    "name":"Gitlab Test",
+    "description":"Aut reprehenderit ut est.",
+    "web_url":"http://example.com/gitlabhq/gitlab-test",
+    "avatar_url":null,
+    "git_ssh_url":"git@example.com:gitlabhq/gitlab-test.git",
+    "git_http_url":"http://example.com/gitlabhq/gitlab-test.git",
+    "namespace":"GitlabHQ",
+    "visibility_level":20,
+    "path_with_namespace":"gitlabhq/gitlab-test",
+    "default_branch":"master",
+    "homepage":"http://example.com/gitlabhq/gitlab-test",
+    "url":"http://example.com/gitlabhq/gitlab-test.git",
+    "ssh_url":"git@example.com:gitlabhq/gitlab-test.git",
+    "http_url":"http://example.com/gitlabhq/gitlab-test.git"
+  },
+  "repository":{
     "name": "Gitlab Test",
-    "url": "http://localhost/gitlab-org/gitlab-test.git",
+    "url": "http://example.com/gitlab-org/gitlab-test.git",
     "description": "Aut reprehenderit ut est.",
     "homepage": "http://example.com/gitlab-org/gitlab-test"
   },
@@ -235,9 +333,25 @@ X-Gitlab-Event: Note Hook
     "avatar_url": "http://www.gravatar.com/avatar/e64c7d89f26bd1972efa854d13d7dd61?s=40\u0026d=identicon"
   },
   "project_id": 5,
-  "repository": {
+  "project":{
+    "name":"Gitlab Test",
+    "description":"Aut reprehenderit ut est.",
+    "web_url":"http://example.com/gitlab-org/gitlab-test",
+    "avatar_url":null,
+    "git_ssh_url":"git@example.com:gitlab-org/gitlab-test.git",
+    "git_http_url":"http://example.com/gitlab-org/gitlab-test.git",
+    "namespace":"Gitlab Org",
+    "visibility_level":10,
+    "path_with_namespace":"gitlab-org/gitlab-test",
+    "default_branch":"master",
+    "homepage":"http://example.com/gitlab-org/gitlab-test",
+    "url":"http://example.com/gitlab-org/gitlab-test.git",
+    "ssh_url":"git@example.com:gitlab-org/gitlab-test.git",
+    "http_url":"http://example.com/gitlab-org/gitlab-test.git"
+  },
+  "repository":{
     "name": "Gitlab Test",
-    "url": "http://example.com/gitlab-org/gitlab-test.git",
+    "url": "http://localhost/gitlab-org/gitlab-test.git",
     "description": "Aut reprehenderit ut est.",
     "homepage": "http://example.com/gitlab-org/gitlab-test"
   },
@@ -275,19 +389,37 @@ X-Gitlab-Event: Note Hook
     "description": "Et voluptas corrupti assumenda temporibus. Architecto cum animi eveniet amet asperiores. Vitae numquam voluptate est natus sit et ad id.",
     "position": 0,
     "locked_at": null,
-    "source": {
-      "name": "Gitlab Test",
-      "ssh_url": "git@example.com:gitlab-org/gitlab-test.git",
-      "http_url": "http://example.com/gitlab-org/gitlab-test.git",
-      "namespace": "Gitlab Org",
-      "visibility_level": 10
+    "source":{
+      "name":"Gitlab Test",
+      "description":"Aut reprehenderit ut est.",
+      "web_url":"http://example.com/gitlab-org/gitlab-test",
+      "avatar_url":null,
+      "git_ssh_url":"git@example.com:gitlab-org/gitlab-test.git",
+      "git_http_url":"http://example.com/gitlab-org/gitlab-test.git",
+      "namespace":"Gitlab Org",
+      "visibility_level":10,
+      "path_with_namespace":"gitlab-org/gitlab-test",
+      "default_branch":"master",
+      "homepage":"http://example.com/gitlab-org/gitlab-test",
+      "url":"http://example.com/gitlab-org/gitlab-test.git",
+      "ssh_url":"git@example.com:gitlab-org/gitlab-test.git",
+      "http_url":"http://example.com/gitlab-org/gitlab-test.git"
     },
     "target": {
-      "name": "Gitlab Test",
-      "ssh_url": "git@example.com:gitlab-org/gitlab-test.git",
-      "http_url": "http://example.com/gitlab-org/gitlab-test.git",
-      "namespace": "Gitlab Org",
-      "visibility_level": 10
+      "name":"Gitlab Test",
+      "description":"Aut reprehenderit ut est.",
+      "web_url":"http://example.com/gitlab-org/gitlab-test",
+      "avatar_url":null,
+      "git_ssh_url":"git@example.com:gitlab-org/gitlab-test.git",
+      "git_http_url":"http://example.com/gitlab-org/gitlab-test.git",
+      "namespace":"Gitlab Org",
+      "visibility_level":10,
+      "path_with_namespace":"gitlab-org/gitlab-test",
+      "default_branch":"master",
+      "homepage":"http://example.com/gitlab-org/gitlab-test",
+      "url":"http://example.com/gitlab-org/gitlab-test.git",
+      "ssh_url":"git@example.com:gitlab-org/gitlab-test.git",
+      "http_url":"http://example.com/gitlab-org/gitlab-test.git"
     },
     "last_commit": {
       "id": "562e173be03b8ff2efb05345d12df18815438a4b",
@@ -298,6 +430,12 @@ X-Gitlab-Event: Note Hook
         "name": "John Smith",
         "email": "john@example.com"
       }
+    },
+    "work_in_progress": false,
+    "assignee": {
+      "name": "User1",
+      "username": "user1",
+      "avatar_url": "http://www.gravatar.com/avatar/e64c7d89f26bd1972efa854d13d7dd61?s=40\u0026d=identicon"
     }
   }
 }
@@ -317,16 +455,32 @@ X-Gitlab-Event: Note Hook
 {
   "object_kind": "note",
   "user": {
-    "name": "Adminstrator",
+    "name": "Administrator",
     "username": "root",
     "avatar_url": "http://www.gravatar.com/avatar/e64c7d89f26bd1972efa854d13d7dd61?s=40\u0026d=identicon"
   },
   "project_id": 5,
-  "repository": {
-    "name": "Gitlab Test",
-    "url": "http://example.com/gitlab-org/gitlab-test.git",
-    "description": "Aut reprehenderit ut est.",
-    "homepage": "http://example.com/gitlab-org/gitlab-test"
+  "project":{
+    "name":"Gitlab Test",
+    "description":"Aut reprehenderit ut est.",
+    "web_url":"http://example.com/gitlab-org/gitlab-test",
+    "avatar_url":null,
+    "git_ssh_url":"git@example.com:gitlab-org/gitlab-test.git",
+    "git_http_url":"http://example.com/gitlab-org/gitlab-test.git",
+    "namespace":"Gitlab Org",
+    "visibility_level":10,
+    "path_with_namespace":"gitlab-org/gitlab-test",
+    "default_branch":"master",
+    "homepage":"http://example.com/gitlab-org/gitlab-test",
+    "url":"http://example.com/gitlab-org/gitlab-test.git",
+    "ssh_url":"git@example.com:gitlab-org/gitlab-test.git",
+    "http_url":"http://example.com/gitlab-org/gitlab-test.git"
+  },
+  "repository":{
+    "name":"diaspora",
+    "url":"git@example.com:mike/diasporadiaspora.git",
+    "description":"",
+    "homepage":"http://example.com/mike/diaspora"
   },
   "object_attributes": {
     "id": 1241,
@@ -364,7 +518,6 @@ X-Gitlab-Event: Note Hook
 
 ### Comment on code snippet
 
-
 **Request header**:
 
 ```
@@ -373,7 +526,7 @@ X-Gitlab-Event: Note Hook
 
 **Request body:**
 
-```
+```json
 {
   "object_kind": "note",
   "user": {
@@ -382,11 +535,27 @@ X-Gitlab-Event: Note Hook
     "avatar_url": "http://www.gravatar.com/avatar/e64c7d89f26bd1972efa854d13d7dd61?s=40\u0026d=identicon"
   },
   "project_id": 5,
-  "repository": {
-    "name": "Gitlab Test",
-    "url": "http://example.com/gitlab-org/gitlab-test.git",
-    "description": "Aut reprehenderit ut est.",
-    "homepage": "http://example.com/gitlab-org/gitlab-test"
+  "project":{
+    "name":"Gitlab Test",
+    "description":"Aut reprehenderit ut est.",
+    "web_url":"http://example.com/gitlab-org/gitlab-test",
+    "avatar_url":null,
+    "git_ssh_url":"git@example.com:gitlab-org/gitlab-test.git",
+    "git_http_url":"http://example.com/gitlab-org/gitlab-test.git",
+    "namespace":"Gitlab Org",
+    "visibility_level":10,
+    "path_with_namespace":"gitlab-org/gitlab-test",
+    "default_branch":"master",
+    "homepage":"http://example.com/gitlab-org/gitlab-test",
+    "url":"http://example.com/gitlab-org/gitlab-test.git",
+    "ssh_url":"git@example.com:gitlab-org/gitlab-test.git",
+    "http_url":"http://example.com/gitlab-org/gitlab-test.git"
+  },
+  "repository":{
+    "name":"Gitlab Test",
+    "url":"http://example.com/gitlab-org/gitlab-test.git",
+    "description":"Aut reprehenderit ut est.",
+    "homepage":"http://example.com/gitlab-org/gitlab-test"
   },
   "object_attributes": {
     "id": 1245,
@@ -413,7 +582,6 @@ X-Gitlab-Event: Note Hook
     "created_at": "2015-04-09 02:40:38 UTC",
     "updated_at": "2015-04-09 02:40:38 UTC",
     "file_name": "test.rb",
-    "expires_at": null,
     "type": "ProjectSnippet",
     "visibility_level": 0
   }
@@ -458,19 +626,37 @@ X-Gitlab-Event: Merge Request Hook
     "target_project_id": 14,
     "iid": 1,
     "description": "",
-    "source": {
-      "name": "awesome_project",
-      "ssh_url": "ssh://git@example.com/awesome_space/awesome_project.git",
-      "http_url": "http://example.com/awesome_space/awesome_project.git",
-      "visibility_level": 20,
-      "namespace": "awesome_space"
+    "source":{
+      "name":"Awesome Project",
+      "description":"Aut reprehenderit ut est.",
+      "web_url":"http://example.com/awesome_space/awesome_project",
+      "avatar_url":null,
+      "git_ssh_url":"git@example.com:awesome_space/awesome_project.git",
+      "git_http_url":"http://example.com/awesome_space/awesome_project.git",
+      "namespace":"Awesome Space",
+      "visibility_level":20,
+      "path_with_namespace":"awesome_space/awesome_project",
+      "default_branch":"master",
+      "homepage":"http://example.com/awesome_space/awesome_project",
+      "url":"http://example.com/awesome_space/awesome_project.git",
+      "ssh_url":"git@example.com:awesome_space/awesome_project.git",
+      "http_url":"http://example.com/awesome_space/awesome_project.git"
     },
     "target": {
-      "name": "awesome_project",
-      "ssh_url": "ssh://git@example.com/awesome_space/awesome_project.git",
-      "http_url": "http://example.com/awesome_space/awesome_project.git",
-      "visibility_level": 20,
-      "namespace": "awesome_space"
+      "name":"Awesome Project",
+      "description":"Aut reprehenderit ut est.",
+      "web_url":"http://example.com/awesome_space/awesome_project",
+      "avatar_url":null,
+      "git_ssh_url":"git@example.com:awesome_space/awesome_project.git",
+      "git_http_url":"http://example.com/awesome_space/awesome_project.git",
+      "namespace":"Awesome Space",
+      "visibility_level":20,
+      "path_with_namespace":"awesome_space/awesome_project",
+      "default_branch":"master",
+      "homepage":"http://example.com/awesome_space/awesome_project",
+      "url":"http://example.com/awesome_space/awesome_project.git",
+      "ssh_url":"git@example.com:awesome_space/awesome_project.git",
+      "http_url":"http://example.com/awesome_space/awesome_project.git"
     },
     "last_commit": {
       "id": "da1560886d4f094c3e6c9ef40349f7d38b5d27d7",
@@ -482,8 +668,14 @@ X-Gitlab-Event: Merge Request Hook
         "email": "gitlabdev@dv6700.(none)"
       }
     },
+    "work_in_progress": false,
     "url": "http://example.com/diaspora/merge_requests/1",
-    "action": "open"
+    "action": "open",
+    "assignee": {
+      "name": "User1",
+      "username": "user1",
+      "avatar_url": "http://www.gravatar.com/avatar/e64c7d89f26bd1972efa854d13d7dd61?s=40\u0026d=identicon"
+    }
   }
 }
 ```
@@ -503,8 +695,8 @@ server.mount_proc '/' do |req, res|
   puts req.body
 end
 
-trap 'INT' do 
-  server.shutdown 
+trap 'INT' do
+  server.shutdown
 end
 server.start
 ```

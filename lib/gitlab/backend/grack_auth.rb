@@ -1,6 +1,14 @@
 require_relative 'shell_env'
 
 module Grack
+  class AuthSpawner
+    def self.call(env)
+      # Avoid issues with instance variables in Grack::Auth persisting across
+      # requests by creating a new instance for each request.
+      Auth.new({}).call(env)
+    end
+  end
+
   class Auth < Rack::Auth::Basic
 
     attr_accessor :user, :project, :env
@@ -10,7 +18,7 @@ module Grack
       @request = Rack::Request.new(env)
       @auth = Request.new(env)
 
-      @gitlab_ci = false
+      @ci = false
 
       # Need this patch due to the rails mount
       # Need this if under RELATIVE_URL_ROOT
@@ -50,14 +58,11 @@ module Grack
         @env['REMOTE_USER'] = @user.username
       end
       STDERR.puts "OK"
+
       if project && authorized_request?
-        if ENV['GITLAB_GRACK_AUTH_ONLY'] == '1'
-          # Tell gitlab-git-http-server the request is OK, and what the GL_ID is
-          render_grack_auth_ok
-        else
-          @app.call(env)
-        end
-      elsif @user.nil? && !@gitlab_ci
+        # Tell gitlab-workhorse the request is OK, and what the GL_ID is
+        render_grack_auth_ok
+      elsif @user.nil? && !@ci
         unauthorized
       else
         render_not_found
@@ -66,12 +71,42 @@ module Grack
 
     private
 
-    def gitlab_ci_request?(login, password)
-      if login == "gitlab-ci-token" && project && project.gitlab_ci?
-        token = project.gitlab_ci_service.token
+    def auth!
+      return unless @auth.provided?
 
-        if token.present? && token == password && git_cmd == 'git-upload-pack'
-          return true
+      return bad_request unless @auth.basic?
+
+      # Authentication with username and password
+      login, password = @auth.credentials
+
+      # Allow authentication for GitLab CI service
+      # if valid token passed
+      if ci_request?(login, password)
+        @ci = true
+        return
+      end
+
+      @user = authenticate_user(login, password)
+
+      if @user
+        Gitlab::ShellEnv.set_env(@user)
+        @env['REMOTE_USER'] = @auth.username
+      end
+    end
+
+    def ci_request?(login, password)
+      matched_login = /(?<s>^[a-zA-Z]*-ci)-token$/.match(login)
+
+      if project && matched_login.present? && git_cmd == 'git-upload-pack'
+        underscored_service = matched_login['s'].underscore
+
+        if underscored_service == 'gitlab_ci'
+          return project && project.valid_build_token?(password)
+        elsif Service.available_services_names.include?(underscored_service)
+          service_method = "#{underscored_service}_service"
+          service = project.send(service_method)
+
+          return service && service.activated? && service.valid_token?(password)
         end
       end
 
@@ -92,9 +127,13 @@ module Grack
     end
 
     def authorized_request?
+      return true if @ci
+
       case git_cmd
       when *Gitlab::GitAccess::DOWNLOAD_COMMANDS
-        if user
+        if !Gitlab.config.gitlab_shell.upload_pack
+          false
+        elsif user
           Gitlab::GitAccess.new(user, project).download_access_check.allowed?
         elsif project.public?
           # Allow clone/fetch for public projects
@@ -103,7 +142,9 @@ module Grack
           false
         end
       when *Gitlab::GitAccess::PUSH_COMMANDS
-        if user
+        if !Gitlab.config.gitlab_shell.receive_pack
+          false
+        elsif user
           # Skip user authorization on upload request.
           # It will be done by the pre-receive hook in the repository.
           true
@@ -142,7 +183,21 @@ module Grack
     end
 
     def render_grack_auth_ok
-      [200, { "Content-Type" => "application/json" }, [JSON.dump({ 'GL_ID' => Gitlab::ShellEnv.gl_id(@user) })]]
+      repo_path =
+        if @request.path_info =~ /^([\w\.\/-]+)\.wiki\.git/
+          ProjectWiki.new(project).repository.path_to_repo
+        else
+          project.repository.path_to_repo
+        end
+
+      [
+        200,
+        { "Content-Type" => "application/json" },
+        [JSON.dump({
+          'GL_ID' => Gitlab::ShellEnv.gl_id(@user),
+          'RepoPath' => repo_path,
+        })]
+      ]
     end
 
     def render_not_found

@@ -2,6 +2,7 @@ require 'spec_helper'
 
 describe 'Comments', feature: true do
   include RepoHelpers
+  include WaitForAjax
 
   describe 'On a merge request', js: true, feature: true do
     let!(:merge_request) { create(:merge_request) }
@@ -123,8 +124,8 @@ describe 'Comments', feature: true do
         it 'removes the attachment div and resets the edit form' do
           find('.js-note-attachment-delete').click
           is_expected.not_to have_css('.note-attachment')
-          expect(find('.current-note-edit-form', visible: false)).
-            not_to be_visible
+          is_expected.not_to have_css('.current-note-edit-form')
+          wait_for_ajax
         end
       end
     end
@@ -166,7 +167,7 @@ describe 'Comments', feature: true do
         end
 
         it 'should be removed when canceled' do
-          page.within(".diff-file form[rel$='#{line_code}']") do
+          page.within(".diff-file form[id$='#{line_code}']") do
             find('.js-close-discussion-note-form').trigger('click')
           end
 

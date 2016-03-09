@@ -2,6 +2,7 @@ class Spinach::Features::Dashboard < Spinach::FeatureSteps
   include SharedAuthentication
   include SharedPaths
   include SharedProject
+  include SharedIssuable
 
   step 'I should see "New Project" link' do
     expect(page).to have_link "New project"
@@ -9,6 +10,10 @@ class Spinach::Features::Dashboard < Spinach::FeatureSteps
 
   step 'I should see "Shop" project link' do
     expect(page).to have_link "Shop"
+  end
+
+  step 'I should see "Shop" project CI status' do
+    expect(page).to have_link "Build skipped"
   end
 
   step 'I should see last push widget' do

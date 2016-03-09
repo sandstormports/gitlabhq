@@ -15,7 +15,7 @@
 
 require 'spec_helper'
 
-describe Milestone do
+describe Milestone, models: true do
   describe "Associations" do
     it { is_expected.to belong_to(:project) }
     it { is_expected.to have_many(:issues) }
@@ -33,6 +33,20 @@ describe Milestone do
   let(:milestone) { create(:milestone) }
   let(:issue) { create(:issue) }
 
+  describe "unique milestone title per project" do
+    it "shouldn't accept the same title in a project twice" do
+      new_milestone = Milestone.new(project: milestone.project, title: milestone.title)
+      expect(new_milestone).not_to be_valid
+    end
+
+    it "should accept the same title in another project" do
+      project = build(:project)
+      new_milestone = Milestone.new(project: project, title: milestone.title)
+
+      expect(new_milestone).to be_valid
+    end
+  end
+
   describe "#percent_complete" do
     it "should not count open issues" do
       milestone.issues << issue
@@ -46,7 +60,7 @@ describe Milestone do
     end
 
     it "should recover from dividing by zero" do
-      expect(milestone.issues).to receive(:count).and_return(0)
+      expect(milestone.issues).to receive(:size).and_return(0)
       expect(milestone.percent_complete).to eq(0)
     end
   end
@@ -100,7 +114,6 @@ describe Milestone do
     end
 
     it { expect(milestone.closed_items_count).to eq(1) }
-    it { expect(milestone.open_items_count).to eq(2) }
     it { expect(milestone.total_items_count).to eq(3) }
     it { expect(milestone.is_empty?).to be_falsey }
   end
@@ -111,8 +124,8 @@ describe Milestone do
 
   describe :is_empty? do
     before do
-      issue = create :closed_issue, milestone: milestone
-      merge_request = create :merge_request, milestone: milestone
+      create :closed_issue, milestone: milestone
+      create :merge_request, milestone: milestone
     end
 
     it 'Should return total count of issues and merge requests assigned to milestone' do
@@ -125,7 +138,7 @@ describe Milestone do
       milestone = create :milestone
       create :closed_issue, milestone: milestone
 
-      issue = create :issue
+      create :issue
     end
 
     it 'should be true if milestone active and all nested issues closed' do
@@ -140,4 +153,32 @@ describe Milestone do
     end
   end
 
+  describe '#sort_issues' do
+    let(:milestone) { create(:milestone) }
+
+    let(:issue1) { create(:issue, milestone: milestone, position: 1) }
+    let(:issue2) { create(:issue, milestone: milestone, position: 2) }
+    let(:issue3) { create(:issue, milestone: milestone, position: 3) }
+    let(:issue4) { create(:issue, position: 42) }
+
+    it 'sorts the given issues' do
+      milestone.sort_issues([issue3.id, issue2.id, issue1.id])
+
+      issue1.reload
+      issue2.reload
+      issue3.reload
+
+      expect(issue1.position).to eq(3)
+      expect(issue2.position).to eq(2)
+      expect(issue3.position).to eq(1)
+    end
+
+    it 'ignores issues not part of the milestone' do
+      milestone.sort_issues([issue3.id, issue2.id, issue1.id, issue4.id])
+
+      issue4.reload
+
+      expect(issue4.position).to eq(42)
+    end
+  end
 end

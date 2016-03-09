@@ -64,8 +64,8 @@ describe 'GitLab Markdown', feature: true do
 
       it 'parses fenced code blocks' do
         aggregate_failures do
-          expect(doc).to have_selector('pre.code.highlight.white.c')
-          expect(doc).to have_selector('pre.code.highlight.white.python')
+          expect(doc).to have_selector('pre.code.highlight.js-syntax-highlight.c')
+          expect(doc).to have_selector('pre.code.highlight.js-syntax-highlight.python')
         end
       end
 
@@ -175,13 +175,15 @@ describe 'GitLab Markdown', feature: true do
     end
   end
 
+  before(:all) do
+    @feat = MarkdownFeature.new
+
+    # `markdown` helper expects a `@project` variable
+    @project = @feat.project
+  end
+
   context 'default pipeline' do
     before(:all) do
-      @feat = MarkdownFeature.new
-
-      # `gfm` helper depends on a `@project` variable
-      @project = @feat.project
-
       @html = markdown(@feat.raw_markdown)
     end
 
@@ -212,6 +214,7 @@ describe 'GitLab Markdown', feature: true do
         expect(doc).to reference_commit_ranges
         expect(doc).to reference_commits
         expect(doc).to reference_labels
+        expect(doc).to reference_milestones
       end
     end
 
@@ -220,12 +223,59 @@ describe 'GitLab Markdown', feature: true do
     end
   end
 
-  # `markdown` calls these two methods
-  def current_user
-    @feat.user
+  context 'wiki pipeline' do
+    before do
+      @project_wiki = @feat.project_wiki
+
+      file = Gollum::File.new(@project_wiki.wiki)
+      expect(file).to receive(:path).and_return('images/example.jpg')
+      expect(@project_wiki).to receive(:find_file).with('images/example.jpg').and_return(file)
+
+      @html = markdown(@feat.raw_markdown, { pipeline: :wiki, project_wiki: @project_wiki })
+    end
+
+    it_behaves_like 'all pipelines'
+
+    it 'includes RelativeLinkFilter' do
+      expect(doc).not_to parse_relative_links
+    end
+
+    it 'includes EmojiFilter' do
+      expect(doc).to parse_emoji
+    end
+
+    it 'includes TableOfContentsFilter' do
+      expect(doc).to create_header_links
+    end
+
+    it 'includes AutolinkFilter' do
+      expect(doc).to create_autolinks
+    end
+
+    it 'includes all reference filters' do
+      aggregate_failures do
+        expect(doc).to reference_users
+        expect(doc).to reference_issues
+        expect(doc).to reference_merge_requests
+        expect(doc).to reference_snippets
+        expect(doc).to reference_commit_ranges
+        expect(doc).to reference_commits
+        expect(doc).to reference_labels
+        expect(doc).to reference_milestones
+      end
+    end
+
+    it 'includes TaskListFilter' do
+      expect(doc).to parse_task_lists
+    end
+
+    it 'includes GollumTagsFilter' do
+      expect(doc).to parse_gollum_tags
+    end
   end
 
-  def user_color_scheme_class
-    :white
+  # Fake a `current_user` helper
+  def current_user
+    @feat.user
   end
 end

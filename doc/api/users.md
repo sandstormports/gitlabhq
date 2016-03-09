@@ -90,7 +90,17 @@ GET /users
 
 You can search for users by email or username with: `/users?search=John`
 
-Also see `def search query` in `app/models/user.rb`.
+In addition, you can lookup users by username:
+
+```
+GET /users?username=:username
+```
+
+For example:
+
+```
+GET /users?username=jack_smith
+```
 
 ## Single user
 
@@ -113,6 +123,13 @@ Parameters:
   "name": "John Smith",
   "state": "active",
   "avatar_url": "http://localhost:3000/uploads/user/avatar/1/cd8.jpeg",
+  "created_at": "2012-05-23T08:00:58Z",
+  "is_admin": false,
+  "bio": null,
+  "skype": "",
+  "linkedin": "",
+  "twitter": "",
+  "website_url": ""
 }
 ```
 
@@ -134,6 +151,8 @@ Parameters:
   "name": "John Smith",
   "state": "active",
   "created_at": "2012-05-23T08:00:58Z",
+  "confirmed_at": "2012-05-23T08:00:58Z",
+  "last_sign_in_at": "2015-03-23T08:00:58Z",
   "bio": null,
   "skype": "",
   "linkedin": "",
@@ -541,7 +560,8 @@ Parameters:
 
 - `uid` (required) - id of specified user
 
-Will return `200 OK` on success, or `404 User Not Found` is user cannot be found.
+Will return `200 OK` on success, `404 User Not Found` is user cannot be found or 
+`403 Forbidden` when trying to block an already blocked user by LDAP synchronization.
 
 ## Unblock user
 
@@ -555,4 +575,5 @@ Parameters:
 
 - `uid` (required) - id of specified user
 
-Will return `200 OK` on success, or `404 User Not Found` is user cannot be found.
+Will return `200 OK` on success, `404 User Not Found` is user cannot be found or
+`403 Forbidden` when trying to unblock a user blocked by LDAP synchronization.

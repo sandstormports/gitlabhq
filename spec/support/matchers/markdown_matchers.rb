@@ -27,6 +27,9 @@ module MarkdownMatchers
 
     match do |actual|
       expect(actual).to have_selector('img.emoji', count: 10)
+
+      image = actual.at_css('img.emoji')
+      expect(image['src'].to_s).to start_with(Gitlab.config.gitlab.url + '/assets')
     end
   end
 
@@ -63,12 +66,30 @@ module MarkdownMatchers
     end
   end
 
+  # GollumTagsFilter
+  matcher :parse_gollum_tags do
+    def have_image(src)
+      have_css("img[src$='#{src}']")
+    end
+
+    set_default_markdown_messages
+
+    match do |actual|
+      expect(actual).to have_link('linked-resource', href: 'linked-resource')
+      expect(actual).to have_link('link-text', href: 'linked-resource')
+      expect(actual).to have_link('http://example.com', href: 'http://example.com')
+      expect(actual).to have_link('link-text', href: 'http://example.com/pdfs/gollum.pdf')
+      expect(actual).to have_image('/gitlabhq/wikis/images/example.jpg')
+      expect(actual).to have_image('http://example.com/images/example.jpg')
+    end
+  end
+
   # UserReferenceFilter
   matcher :reference_users do
     set_default_markdown_messages
 
     match do |actual|
-      expect(actual).to have_selector('a.gfm.gfm-project_member', count: 3)
+      expect(actual).to have_selector('a.gfm.gfm-project_member', count: 4)
     end
   end
 
@@ -77,7 +98,7 @@ module MarkdownMatchers
     set_default_markdown_messages
 
     match do |actual|
-      expect(actual).to have_selector('a.gfm.gfm-issue', count: 3)
+      expect(actual).to have_selector('a.gfm.gfm-issue', count: 6)
     end
   end
 
@@ -86,7 +107,7 @@ module MarkdownMatchers
     set_default_markdown_messages
 
     match do |actual|
-      expect(actual).to have_selector('a.gfm.gfm-merge_request', count: 3)
+      expect(actual).to have_selector('a.gfm.gfm-merge_request', count: 6)
       expect(actual).to have_selector('em a.gfm-merge_request')
     end
   end
@@ -96,7 +117,7 @@ module MarkdownMatchers
     set_default_markdown_messages
 
     match do |actual|
-      expect(actual).to have_selector('a.gfm.gfm-snippet', count: 2)
+      expect(actual).to have_selector('a.gfm.gfm-snippet', count: 5)
     end
   end
 
@@ -105,7 +126,7 @@ module MarkdownMatchers
     set_default_markdown_messages
 
     match do |actual|
-      expect(actual).to have_selector('a.gfm.gfm-commit_range', count: 2)
+      expect(actual).to have_selector('a.gfm.gfm-commit_range', count: 5)
     end
   end
 
@@ -114,7 +135,7 @@ module MarkdownMatchers
     set_default_markdown_messages
 
     match do |actual|
-      expect(actual).to have_selector('a.gfm.gfm-commit', count: 2)
+      expect(actual).to have_selector('a.gfm.gfm-commit', count: 5)
     end
   end
 
@@ -123,7 +144,16 @@ module MarkdownMatchers
     set_default_markdown_messages
 
     match do |actual|
-      expect(actual).to have_selector('a.gfm.gfm-label', count: 3)
+      expect(actual).to have_selector('a.gfm.gfm-label', count: 4)
+    end
+  end
+
+  # MilestoneReferenceFilter
+  matcher :reference_milestones do
+    set_default_markdown_messages
+
+    match do |actual|
+      expect(actual).to have_selector('a.gfm.gfm-milestone', count: 3)
     end
   end
 
