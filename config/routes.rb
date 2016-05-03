@@ -28,7 +28,7 @@ Rails.application.routes.draw do
     get '/rails/info'            => 'rails/info#index'
   end
 
-w  # Autocomplete
+  # Autocomplete
   get '/autocomplete/users' => 'autocomplete#users'
   get '/autocomplete/users/:id' => 'autocomplete#user'
 
