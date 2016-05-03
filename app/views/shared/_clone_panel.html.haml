@@ -1,25 +1,6 @@
 - project = project || @project
 
 .git-clone-holder.input-group
-  .input-group-btn
-    %a#clone-dropdown.clone-dropdown-btn.btn{href: '#', 'data-toggle' => 'dropdown'}
-      %span
-        = default_clone_protocol.upcase
-      = icon('angle-down')
-    %ul.dropdown-menu.dropdown-menu-right.clone-options-dropdown
-      %li
-        = ssh_clone_button(project)
-      %li
-        = http_clone_button(project)
-
-  = text_field_tag :project_clone, default_url_to_repo(project), class: "js-select-on-focus form-control", readonly: true
-  .input-group-btn
-    = clipboard_button(clipboard_target: '#project_clone')
-
-:javascript
-  $('ul.clone-options-dropdown a').on('click',function(e){
-    e.preventDefault();
-    var $this = $(this);
-    $('a.clone-dropdown-btn span').text($this.text());
-    $('#project_clone').val($this.attr('href'));
-  });
+  %p To clone this repo, copy and paste the below commands:
+  %iframe{:id => "webkey-offer", :onload => "sandstormGetWebkey('#{project.path_with_namespace}')",
+          :style => "width:600px;height:60px;border: medium 1px;"}

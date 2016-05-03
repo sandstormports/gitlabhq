@@ -44,7 +44,7 @@
         = f.text_field :name, class: "form-control", required: true
         %span.help-block Enter your name, so people you know can recognize you.
 
-      .form-group
+      -#.form-group
         = f.label :email, class: "label-light"
         - if @user.ldap_user? && @user.ldap_email?
           = f.text_field :email, class: "form-control", required: true, readonly: true

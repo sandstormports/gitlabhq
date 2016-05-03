@@ -37,6 +37,12 @@ class GroupsController < Groups::ApplicationController
   end
 
   def show
+    redirect_to '/gitlab/repo'
+    return
+
+    @events = Event.in_projects(project_ids)
+    @events = event_filter.apply_filter(@events)
+    @events = @events.limit(20).offset(params[:offset] || 0)
     @last_push = current_user.recent_push if current_user
 
     @projects = @projects.includes(:namespace)

@@ -84,15 +84,8 @@ class User < ActiveRecord::Base
   default_value_for :hide_no_password, false
   default_value_for :theme_id, gitlab_config.default_theme
 
-  devise :two_factor_authenticatable,
-         otp_secret_encryption_key: File.read(Rails.root.join('.secret')).chomp
-  alias_attribute :two_factor_enabled, :otp_required_for_login
-
-  devise :two_factor_backupable, otp_number_of_backup_codes: 10
-  serialize :otp_backup_codes, JSON
-
-  devise :lockable, :async, :recoverable, :rememberable, :trackable,
-    :validatable, :omniauthable, :confirmable, :registerable
+  devise :database_authenticatable, :lockable, :async,
+         :recoverable, :rememberable, :trackable, :validatable, :confirmable, :registerable
 
   attr_accessor :force_random_password
 
@@ -137,7 +130,7 @@ class User < ActiveRecord::Base
   has_many :recent_events, -> { order "id DESC" }, foreign_key: :author_id,   class_name: "Event"
   has_many :assigned_issues,          dependent: :destroy, foreign_key: :assignee_id, class_name: "Issue"
   has_many :assigned_merge_requests,  dependent: :destroy, foreign_key: :assignee_id, class_name: "MergeRequest"
-  has_many :oauth_applications, class_name: 'Doorkeeper::Application', as: :owner, dependent: :destroy
+  #has_many :oauth_applications, class_name: 'Doorkeeper::Application', as: :owner, dependent: :destroy
   has_one  :abuse_report,             dependent: :destroy
   has_many :spam_logs,                dependent: :destroy
   has_many :builds,                   dependent: :nullify, class_name: 'Ci::Build'
@@ -159,11 +152,11 @@ class User < ActiveRecord::Base
 
   validates :notification_level, presence: true
   validate :namespace_uniq, if: ->(user) { user.username_changed? }
-  validate :avatar_type, if: ->(user) { user.avatar.present? && user.avatar_changed? }
+  #validate :avatar_type, if: ->(user) { user.avatar.present? && user.avatar_changed? }
   validate :unique_email, if: ->(user) { user.email_changed? }
   validate :owns_notification_email, if: ->(user) { user.notification_email_changed? }
   validate :owns_public_email, if: ->(user) { user.public_email_changed? }
-  validates :avatar, file_size: { maximum: 200.kilobytes.to_i }
+  #validates :avatar, file_size: { maximum: 200.kilobytes.to_i }
 
   before_validation :generate_password, on: :create
   before_validation :restricted_signup_domains, on: :create
@@ -223,7 +216,7 @@ class User < ActiveRecord::Base
     end
   end
 
-  mount_uploader :avatar, AvatarUploader
+  #mount_uploader :avatar, AvatarUploader
 
   # Scopes
   scope :admins, -> { where(admin: true) }
@@ -399,9 +392,10 @@ class User < ActiveRecord::Base
   end
 
   def avatar_type
-    unless self.avatar.image?
-      self.errors.add :avatar, "only images allowed"
-    end
+    # in the Sandstorm port, we store the avatar URL in the `avatar` field.
+    #unless self.avatar.image?
+    #  self.errors.add :avatar, "only images allowed"
+    #end
   end
 
   def unique_email
@@ -689,9 +683,10 @@ class User < ActiveRecord::Base
 
   def avatar_url(size = nil, scale = 2)
     if avatar.present?
-      [gitlab_config.url, avatar.url].join
+      avatar
+      #[gitlab_config.url, avatar.url].join
     else
-      GravatarService.new.execute(email, size, scale)
+      #GravatarService.new.execute(email, size, scale)
     end
   end
 

@@ -12,6 +12,9 @@ module Gitlab
     # Application configuration should go into files in config/initializers
     # -- all .rb files in that directory are automatically loaded.
 
+    config.logger = Logger.new(STDERR)
+    config.eager_load = true
+
     # Custom directories with classes and modules you want to be autoloadable.
     config.autoload_paths.push(*%W(#{config.root}/lib
                                    #{config.root}/app/models/hooks
@@ -52,20 +55,20 @@ module Gitlab
     # Version of your assets, change this if you want to expire all your assets
     config.assets.version = '1.0'
 
-    config.action_view.sanitized_allowed_protocols = %w(smb)
+    #config.action_view.sanitized_allowed_protocols = %w(smb)
 
-    config.middleware.use Rack::Attack
+    #config.middleware.use Rack::Attack
 
     # Allow access to GitLab API from other domains
-    config.middleware.use Rack::Cors do
-      allow do
-        origins '*'
-        resource '/api/*',
-          headers: :any,
-          methods: :any,
-          expose: ['Link']
-      end
-    end
+    #config.middleware.use Rack::Cors do
+    #  allow do
+    #    origins '*'
+    #    resource '/api/*',
+    #      headers: :any,
+    #      methods: :any,
+    #      expose: ['Link']
+    #  end
+    #end
 
     redis_config_hash = Gitlab::Redis.redis_store_options
     redis_config_hash[:namespace] = Gitlab::Redis::CACHE_NAMESPACE

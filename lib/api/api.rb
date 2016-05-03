@@ -27,36 +27,36 @@ module API
 
     helpers Helpers
 
-    mount Groups
-    mount GroupMembers
-    mount Users
-    mount Projects
-    mount Repositories
-    mount Issues
-    mount Milestones
-    mount Session
-    mount MergeRequests
-    mount Notes
-    mount Internal
-    mount SystemHooks
-    mount ProjectSnippets
-    mount ProjectMembers
-    mount DeployKeys
-    mount ProjectHooks
-    mount Services
-    mount Files
-    mount Commits
-    mount CommitStatus
-    mount Namespaces
-    mount Branches
-    mount Labels
-    mount Settings
-    mount Keys
-    mount Tags
-    mount Triggers
-    mount Builds
-    mount Variables
-    mount Runners
-    mount Licenses
+    #mount Groups
+    #mount GroupMembers
+    #mount Users
+    #mount Projects
+    #mount Repositories
+    #mount Issues
+    #mount Milestones
+    #mount Session
+    #mount MergeRequests
+    #mount Notes
+    #mount Internal
+    #mount SystemHooks
+    #mount ProjectSnippets
+    #mount ProjectMembers
+    #mount DeployKeys
+    #mount ProjectHooks
+    #mount Services
+    #mount Files
+    #mount Commits
+    #mount CommitStatus
+    #mount Namespaces
+    #mount Branches
+    #mount Labels
+    #mount Settings
+    #mount Keys
+    #mount Tags
+    #mount Triggers
+    #mount Builds
+    #mount Variables
+    #mount Runners
+    #mount Licenses
   end
 end

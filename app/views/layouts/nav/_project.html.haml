@@ -1,5 +1,5 @@
 %ul.nav.nav-sidebar
-  - if @project.group
+  -# if @project.group
     = nav_link do
       = link_to group_path(@project.group), title: 'Go to group', class: 'back-link' do
         = icon('caret-square-o-left fw')

@@ -31,10 +31,33 @@ module Grack
 
       @env['SCRIPT_NAME'] = ""
 
-      auth!
+      userid = env['HTTP_X_SANDSTORM_USER_ID'].encode(Encoding::UTF_8)
 
-      lfs_response = Gitlab::Lfs::Router.new(project, @user, @request).try_call
-      return lfs_response unless lfs_response.nil?
+      u = User.where(email: userid + "@example.com").first
+      if u
+        @user = u
+        Rails.logger.info "FOUND USER #{@user.id}"
+
+        permission_list = env["HTTP_X_SANDSTORM_PERMISSIONS"].split(',')
+        project = Project.where(name: "repo").first
+        role = Gitlab::Access::GUEST
+        if permission_list.include? 'owner'
+          role = Gitlab::Access::OWNER
+        elsif permission_list.include? 'master'
+          role = Gitlab::Access::MASTER
+        elsif permission_list.include? 'developer'
+          role = Gitlab::Access::DEVELOPER
+        elsif permission_list.include? 'reporter'
+          role = Gitlab::Access::REPORTER
+        end
+        if project
+          project.team.add_user(u, role)
+        end
+
+        Gitlab::ShellEnv.set_env(@user)
+        @env['REMOTE_USER'] = @user.username
+      end
+      STDERR.puts "OK"
 
       if project && authorized_request?
         # Tell gitlab-workhorse the request is OK, and what the GL_ID is
@@ -100,45 +123,7 @@ module Grack
     def authenticate_user(login, password)
       user = Gitlab::Auth.new.find(login, password)
 
-      unless user
-        user = oauth_access_token_check(login, password)
-      end
-
-      # If the user authenticated successfully, we reset the auth failure count
-      # from Rack::Attack for that IP. A client may attempt to authenticate
-      # with a username and blank password first, and only after it receives
-      # a 401 error does it present a password. Resetting the count prevents
-      # false positives from occurring.
-      #
-      # Otherwise, we let Rack::Attack know there was a failed authentication
-      # attempt from this IP. This information is stored in the Rails cache
-      # (Redis) and will be used by the Rack::Attack middleware to decide
-      # whether to block requests from this IP.
-      config = Gitlab.config.rack_attack.git_basic_auth
-
-      if config.enabled
-        if user
-          # A successful login will reset the auth failure count from this IP
-          Rack::Attack::Allow2Ban.reset(@request.ip, config)
-        else
-          banned = Rack::Attack::Allow2Ban.filter(@request.ip, config) do
-            # Unless the IP is whitelisted, return true so that Allow2Ban
-            # increments the counter (stored in Rails.cache) for the IP
-            if config.ip_whitelist.include?(@request.ip)
-              false
-            else
-              true
-            end
-          end
-
-          if banned
-            Rails.logger.info "IP #{@request.ip} failed to login " \
-              "as #{login} but has been temporarily banned from Git auth"
-          end
-        end
-      end
-
-      user
+      nil # No user was found
     end
 
     def authorized_request?

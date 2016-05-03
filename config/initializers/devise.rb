@@ -203,30 +203,11 @@ Devise.setup do |config|
   # If you want to use other strategies, that are not supported by Devise, or
   # change the failure app, you can configure them inside the config.warden block.
   #
+
   config.warden do |manager|
-    manager.failure_app = Gitlab::DeviseFailure
-    # manager.intercept_401 = false
-    # manager.default_strategies(scope: :user).unshift :some_external_strategy
-  end
-
-  if Gitlab::LDAP::Config.enabled?
-    Gitlab.config.ldap.servers.values.each do |server|
-      if server['allow_username_or_email_login']
-        email_stripping_proc = ->(name) {name.gsub(/@.*\z/,'')}
-      else
-        email_stripping_proc = ->(name) {name}
-      end
-
-      config.omniauth server['provider_name'],
-        host:     server['host'],
-        base:     server['base'],
-        uid:      server['uid'],
-        port:     server['port'],
-        method:   server['method'],
-        bind_dn:  server['bind_dn'],
-        password: server['password'],
-        name_proc: email_stripping_proc
-    end
+    manager.intercept_401 = false
+    manager.strategies.add(:sandstorm, Devise::Strategies::Sandstorm)
+    manager.default_strategies(scope: :user).unshift :sandstorm
   end
 
   Gitlab.config.omniauth.providers.each do |provider|

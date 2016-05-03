@@ -14,7 +14,7 @@ module AttrEncrypted
         end
       end
 
-      alias_method_chain :attribute_instance_methods_as_symbols, :no_db_connection
+      #alias_method_chain :attribute_instance_methods_as_symbols, :no_db_connection
     end
   end
 end

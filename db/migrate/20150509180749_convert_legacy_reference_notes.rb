@@ -7,6 +7,9 @@
 #   mentioned in 54f7727c850972f0401c1312a7c4a6a380de5666
 class ConvertLegacyReferenceNotes < ActiveRecord::Migration
   def up
+    # Sandstorm port: SQLite doesn't like this migration
+    return
+
     execute %q{UPDATE notes SET note = trim(both '_' from note) WHERE system = true AND note LIKE '\_%\_'}
   end
 

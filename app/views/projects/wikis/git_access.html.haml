@@ -17,8 +17,8 @@
       :preserve
         gem install gollum
 
-    %legend Clone Your Wiki:
-    %pre.dark
+    -#%legend Clone Your Wiki:
+    -#%pre.dark
       :preserve
         git clone #{ content_tag(:span, default_url_to_repo(@project_wiki), class: 'clone')}
         cd #{h @project_wiki.path}

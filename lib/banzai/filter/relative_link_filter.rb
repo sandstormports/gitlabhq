@@ -1,4 +1,5 @@
 require 'uri'
+require 'addressable/uri'
 
 module Banzai
   module Filter

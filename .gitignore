@@ -19,6 +19,11 @@
 Vagrantfile
 backups/*
 config/aws.yml
+<<<<<<< HEAD
+config/initializers/omniauth.rb
+config/initializers/rack_attack.rb
+config/initializers/smtp_settings.rb
+=======
 config/database.yml
 config/gitlab.yml
 config/gitlab_ci.yml
@@ -26,6 +31,7 @@ config/initializers/rack_attack.rb
 config/initializers/smtp_settings.rb
 config/initializers/relative_url.rb
 config/resque.yml
+>>>>>>> upstream/master
 config/unicorn.rb
 config/secrets.yml
 config/sidekiq.yml
@@ -45,5 +51,9 @@ rails_best_practices_output.html
 /tags
 tmp/
 vendor/bundle/*
+<<<<<<< HEAD
+
+=======
 builds/*
 shared/*
+>>>>>>> upstream/master

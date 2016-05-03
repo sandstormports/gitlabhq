@@ -14,37 +14,39 @@ gem 'sprockets', '~> 3.6.0'
 gem "default_value_for", "~> 3.0.0"
 
 # Supported DBs
-gem "mysql2", '~> 0.3.16', group: :mysql
-gem "pg", '~> 0.18.2', group: :postgres
+#gem "mysql2", group: :mysql
+#gem "pg", group: :postgres
+
+gem "sqlite3" # not officially supported
 
 # Authentication libraries
 gem 'devise',                 '~> 3.5.4'
 gem 'devise-async',           '~> 0.9.0'
-gem 'doorkeeper',             '~> 2.2.0'
-gem 'omniauth',               '~> 1.3.1'
-gem 'omniauth-auth0',         '~> 1.4.1'
-gem 'omniauth-azure-oauth2',  '~> 0.0.6'
-gem 'omniauth-bitbucket',     '~> 0.0.2'
-gem 'omniauth-cas3',          '~> 1.1.2'
-gem 'omniauth-facebook',      '~> 3.0.0'
-gem 'omniauth-github',        '~> 1.1.1'
-gem 'omniauth-gitlab',        '~> 1.0.0'
-gem 'omniauth-google-oauth2', '~> 0.2.0'
-gem 'omniauth-kerberos',      '~> 0.3.0', group: :kerberos
-gem 'omniauth-saml',          '~> 1.5.0'
-gem 'omniauth-shibboleth',    '~> 1.2.0'
-gem 'omniauth-twitter',       '~> 1.2.0'
-gem 'omniauth_crowd',         '~> 2.2.0'
-gem 'rack-oauth2',            '~> 1.2.1'
+#gem 'doorkeeper',             '~> 2.2.0'
+#gem 'omniauth',               '~> 1.3.1'
+#gem 'omniauth-auth0',         '~> 1.4.1'
+#gem 'omniauth-azure-oauth2',  '~> 0.0.6'
+#gem 'omniauth-bitbucket',     '~> 0.0.2'
+#gem 'omniauth-cas3',          '~> 1.1.2'
+#gem 'omniauth-facebook',      '~> 3.0.0'
+#gem 'omniauth-github',        '~> 1.1.1'
+#gem 'omniauth-gitlab',        '~> 1.0.0'
+#gem 'omniauth-google-oauth2', '~> 0.2.0'
+#gem 'omniauth-kerberos',      '~> 0.3.0', group: :kerberos
+#gem 'omniauth-saml',          '~> 1.5.0'
+#gem 'omniauth-shibboleth',    '~> 1.2.0'
+#gem 'omniauth-twitter',       '~> 1.2.0'
+#gem 'omniauth_crowd',         '~> 2.2.0'
+#gem 'rack-oauth2',            '~> 1.2.1'
 
 # Spam and anti-bot protection
-gem 'recaptcha', require: 'recaptcha/rails'
-gem 'akismet', '~> 2.0'
+#gem 'recaptcha', require: 'recaptcha/rails'
+#gem 'akismet', '~> 2.0'
 
 # Two-factor authentication
-gem 'devise-two-factor', '~> 2.0.0'
-gem 'rqrcode-rails3', '~> 0.1.7'
-gem 'attr_encrypted', '~> 1.3.4'
+#gem 'devise-two-factor', '~> 2.0.0'
+#gem 'rqrcode-rails3', '~> 0.1.7'
+#gem 'attr_encrypted', '~> 1.3.4'
 
 # Browser detection
 gem "browser", '~> 1.0.0'
@@ -56,7 +58,7 @@ gem "gitlab_git", '~> 10.0'
 # LDAP Auth
 # GitLab fork with several improvements to original library. For full list of changes
 # see https://github.com/intridea/omniauth-ldap/compare/master...gitlabhq:master
-gem 'gitlab_omniauth-ldap', '~> 1.2.1', require: "omniauth-ldap"
+#gem 'gitlab_omniauth-ldap', '~> 1.2.1', require: "omniauth-ldap"
 
 # Git Wiki
 # Required manually in config/initializers/gollum.rb to control load order
@@ -69,7 +71,7 @@ gem "github-linguist", "~> 4.7.0", require: "linguist"
 # API
 gem 'grape',        '~> 0.13.0'
 gem 'grape-entity', '~> 0.4.2'
-gem 'rack-cors',    '~> 0.4.0', require: 'rack/cors'
+#gem 'rack-cors',    '~> 0.4.0', require: 'rack/cors'
 
 # Pagination
 gem "kaminari", "~> 0.16.3"
@@ -84,14 +86,14 @@ gem "carrierwave", '~> 0.10.0'
 gem 'dropzonejs-rails', '~> 0.7.1'
 
 # for aws storage
-gem "fog", "~> 1.36.0"
-gem "unf", '~> 0.1.4'
+#gem "fog", "~> 1.36.0"
+#gem "unf", '~> 0.1.4'
 
 # Authorization
 gem "six", '~> 0.2.0'
 
 # Seed data
-gem "seed-fu", '~> 2.3.5'
+#gem "seed-fu", '~> 2.3.5'
 
 # Markdown and HTML processing
 gem 'html-pipeline', '~> 1.11.0'
@@ -137,7 +139,7 @@ gem 'redis-namespace'
 gem "httparty", '~> 0.13.3'
 
 # Colored output to console
-gem "colorize", '~> 0.7.0'
+#gem "colorize", '~> 0.7.0'
 
 # GitLab settings
 gem 'settingslogic', '~> 2.0.9'
@@ -154,28 +156,28 @@ gem 'redis', '~> 3.2'
 gem 'connection_pool', '~> 2.0'
 
 # Campfire integration
-gem 'tinder', '~> 1.10.0'
+#gem 'tinder', '~> 1.10.0'
 
 # HipChat integration
-gem 'hipchat', '~> 1.5.0'
+#gem 'hipchat', '~> 1.5.0'
 
 # Flowdock integration
-gem "gitlab-flowdock-git-hook", "~> 1.0.1"
+#gem "gitlab-flowdock-git-hook", "~> 1.0.1"
 
 # Gemnasium integration
-gem "gemnasium-gitlab-service", "~> 0.2"
+#gem "gemnasium-gitlab-service", "~> 0.2"
 
 # Slack integration
-gem "slack-notifier", "~> 1.2.0"
+#gem "slack-notifier", "~> 1.2.0"
 
 # Asana integration
-gem 'asana', '~> 0.4.0'
+#gem 'asana', '~> 0.4.0'
 
 # FogBugz integration
-gem 'ruby-fogbugz', '~> 0.2.1'
+#gem 'ruby-fogbugz', '~> 0.2.1'
 
 # d3
-gem 'd3_rails', '~> 3.5.0'
+#gem 'd3_rails', '~> 3.5.0'
 
 #cal-heatmap
 gem 'cal-heatmap-rails', '~> 3.5.0'
@@ -194,7 +196,7 @@ gem "loofah", "~> 2.0.3"
 gem 'licensee', '~> 8.0.0'
 
 # Protect against bruteforcing
-gem "rack-attack", '~> 4.3.1'
+#gem "rack-attack", '~> 4.3.1'
 
 # Ace editor
 gem 'ace-rails-ap', '~> 2.0.1'
@@ -313,24 +315,25 @@ group :test do
 end
 
 group :production do
-  gem "gitlab_meta", '7.0'
+  #gem "gitlab_meta", '7.0'
 end
 
-gem "newrelic_rpm", '~> 3.14'
+#gem "newrelic_rpm", '~> 3.14'
 
-gem 'octokit', '~> 4.3.0'
+#gem 'octokit', '~> 4.3.0'
 
 gem "mail_room", "~> 0.6.1"
 
 gem 'email_reply_parser', '~> 0.5.8'
 
 ## CI
-gem 'activerecord-deprecated_finders', '~> 1.0.3'
-gem 'activerecord-session_store', '~> 0.1.0'
-gem "nested_form", '~> 0.3.2'
+#gem 'activerecord-deprecated_finders', '~> 1.0.3'
+#gem 'activerecord-session_store', '~> 0.1.0'
+#gem "nested_form", '~> 0.3.2'
 
 # OAuth
-gem 'oauth2', '~> 1.0.0'
+#gem 'oauth2', '~> 1.0.0'
 
 # Soft deletion
 gem "paranoia", "~> 2.0"
+

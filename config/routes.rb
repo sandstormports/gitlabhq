@@ -28,30 +28,7 @@ Rails.application.routes.draw do
     get '/rails/info'            => 'rails/info#index'
   end
 
-  namespace :ci do
-    # CI API
-    Ci::API::API.logger Rails.logger
-    mount Ci::API::API => '/api'
-
-    resource :lint, only: [:show, :create]
-
-    resources :projects do
-      member do
-        get :status, to: 'projects#badge'
-        get :integration
-      end
-    end
-
-    root to: 'projects#index'
-  end
-
-  use_doorkeeper do
-    controllers applications: 'oauth/applications',
-                authorized_applications: 'oauth/authorized_applications',
-                authorizations: 'oauth/authorizations'
-  end
-
-  # Autocomplete
+w  # Autocomplete
   get '/autocomplete/users' => 'autocomplete#users'
   get '/autocomplete/users/:id' => 'autocomplete#user'
 
@@ -414,7 +391,7 @@ Rails.application.routes.draw do
 
   resources :projects, constraints: { id: /[^\/]+/ }, only: [:index, :new, :create]
 
-  devise_for :users, controllers: { omniauth_callbacks: :omniauth_callbacks, registrations: :registrations , passwords: :passwords, sessions: :sessions, confirmations: :confirmations }
+  devise_for :users, controllers: { registrations: :registrations , passwords: :passwords, sessions: :sessions, confirmations: :confirmations }
 
   devise_scope :user do
     get '/users/auth/:provider/omniauth_error' => 'omniauth_callbacks#omniauth_error', as: :omniauth_error
