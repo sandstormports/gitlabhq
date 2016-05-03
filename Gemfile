@@ -156,22 +156,22 @@ gem 'redis', '~> 3.2'
 gem 'connection_pool', '~> 2.0'
 
 # Campfire integration
-#gem 'tinder', '~> 1.10.0'
+gem 'tinder', '~> 1.10.0'
 
 # HipChat integration
-#gem 'hipchat', '~> 1.5.0'
+gem 'hipchat', '~> 1.5.0'
 
 # Flowdock integration
-#gem "gitlab-flowdock-git-hook", "~> 1.0.1"
+gem "gitlab-flowdock-git-hook", "~> 1.0.1"
 
 # Gemnasium integration
-#gem "gemnasium-gitlab-service", "~> 0.2"
+gem "gemnasium-gitlab-service", "~> 0.2"
 
 # Slack integration
-#gem "slack-notifier", "~> 1.2.0"
+gem "slack-notifier", "~> 1.2.0"
 
 # Asana integration
-#gem 'asana', '~> 0.4.0'
+gem 'asana', '~> 0.4.0'
 
 # FogBugz integration
 #gem 'ruby-fogbugz', '~> 0.2.1'
