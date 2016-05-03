@@ -40,13 +40,13 @@ gem 'devise-async',           '~> 0.9.0'
 #gem 'rack-oauth2',            '~> 1.2.1'
 
 # Spam and anti-bot protection
-#gem 'recaptcha', require: 'recaptcha/rails'
+gem 'recaptcha', require: 'recaptcha/rails'
 #gem 'akismet', '~> 2.0'
 
 # Two-factor authentication
-#gem 'devise-two-factor', '~> 2.0.0'
-#gem 'rqrcode-rails3', '~> 0.1.7'
-#gem 'attr_encrypted', '~> 1.3.4'
+gem 'devise-two-factor', '~> 2.0.0'
+gem 'rqrcode-rails3', '~> 0.1.7'
+gem 'attr_encrypted', '~> 1.3.4'
 
 # Browser detection
 gem "browser", '~> 1.0.0'
