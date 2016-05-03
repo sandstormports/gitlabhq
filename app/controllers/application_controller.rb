@@ -1,5 +1,5 @@
 require 'gon'
-require 'fogbugz'
+#require 'fogbugz'
 
 class ApplicationController < ActionController::Base
   include Gitlab::CurrentSettings
