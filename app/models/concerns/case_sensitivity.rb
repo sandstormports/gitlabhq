@@ -7,6 +7,10 @@ module CaseSensitivity
     #
     # Unlike other ActiveRecord methods this method only operates on a Hash.
     def iwhere(params)
+      if Gitlab::Database.sqlite?
+        return self.where(params)
+      end
+
       criteria   = self
       cast_lower = Gitlab::Database.postgresql?
 

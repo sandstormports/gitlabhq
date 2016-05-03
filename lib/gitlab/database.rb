@@ -12,6 +12,10 @@ module Gitlab
       adapter_name.downcase == 'postgresql'
     end
 
+    def self.sqlite?
+      adapter_name.downcase == 'sqlite'
+    end
+
     def self.version
       database_version.match(/\A(?:PostgreSQL |)([^\s]+).*\z/)[1]
     end
