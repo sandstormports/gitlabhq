@@ -18,7 +18,17 @@ class Dashboard::ProjectsController < Dashboard::ApplicationController
 
       p = Project.where(name: "repo").first
       if !p
-        p = ::Projects::CreateService.new(current_user, name: "repo", path: "repo", visibility_level: "20", namespace_id: g.id, builds_enabled: false).execute
+        p = ::Projects::CreateService.new(current_user, name: "repo", path: "repo", namespace_id: g.id).execute
+      end
+
+      if p.visibility_level != 0
+        p.visibility_level = 0
+        p.save
+      end
+
+      if p.builds_enabled
+        p.builds_enabled = false
+        p.save
       end
 
       redirect_to project_path(p)
