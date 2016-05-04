@@ -243,7 +243,6 @@ class ProjectsController < Projects::ApplicationController
   end
 
   def repo_exists?
-    STDERR.puts "repo exists???\n\n\n"
     project.repository_exists? && !project.empty_repo?
   end
 
