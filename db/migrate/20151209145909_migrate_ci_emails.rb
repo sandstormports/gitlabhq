@@ -2,6 +2,9 @@ class MigrateCiEmails < ActiveRecord::Migration
   include Gitlab::Database
 
   def up
+    # Sandstorm port does not enable CI.
+    return
+
     # This inserts a new service: BuildsEmailService
     # It "manually" constructs the properties (JSON-encoded)
     # Migrating all ci_projects e-mail related columns

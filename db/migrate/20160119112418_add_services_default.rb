@@ -7,7 +7,7 @@ class AddServicesDefault < ActiveRecord::Migration
 
     execute <<-EOF
 UPDATE services
-SET #{default} = true
+SET #{default} = 1
 WHERE #{type} = 'GitlabIssueTrackerService'
 EOF
 
