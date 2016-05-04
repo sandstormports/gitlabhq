@@ -20,11 +20,11 @@
 
   .cover-controls
     - if current_user
-      = link_to namespace_project_path(@project.namespace, @project, format: :atom, private_token: current_user.private_token), class: 'btn btn-gray' do
+      -# = link_to namespace_project_path(@project.namespace, @project, format: :atom, private_token: current_user.private_token), class: 'btn btn-gray' do
         = icon('rss')
       - access = user_max_access_in_project(current_user.id, @project)
       - can_edit = can?(current_user, :admin_project, @project)
-      - if access || can_edit
+      - if can_edit
         %span.dropdown.project-settings-dropdown
           %a.dropdown-new.btn.btn-gray#project-settings-button{href: '#', 'data-toggle' => 'dropdown'}
             = icon('cog')
@@ -34,7 +34,7 @@
               %li
                 = link_to edit_project_path(@project) do
                   Edit Project
-            - if access
+            -# if access
               %li
                 = link_to leave_namespace_project_project_members_path(@project.namespace, @project),
                   data: { confirm: leave_project_message(@project) }, method: :delete, title: 'Leave project' do
@@ -54,7 +54,7 @@
           = render "projects/buttons/download"
           = render 'projects/buttons/dropdown'
 
-      = render 'projects/buttons/notifications'
+      -# = render 'projects/buttons/notifications'
 
 :javascript
   new Star();

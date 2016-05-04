@@ -17,7 +17,7 @@
               %li.impersonation
                 = link_to admin_impersonation_path, method: :delete, title: 'Stop Impersonation', data: { toggle: 'tooltip', placement: 'bottom', container: 'body' } do
                   = icon('user-secret fw')
-            - if current_user.is_admin?
+            -# if current_user.is_admin?
               %li
                 = link_to admin_root_path, title: 'Admin Area', data: {toggle: 'tooltip', placement: 'bottom', container: 'body'} do
                   = icon('wrench fw')
@@ -25,7 +25,7 @@
               = link_to dashboard_todos_path, title: 'Todos', data: {toggle: 'tooltip', placement: 'bottom', container: 'body'} do
                 %span.badge.todos-pending-count
                   = todos_pending_count
-            - if current_user.can_create_project?
+            -# if current_user.can_create_project?
               %li
                 = link_to new_project_path, title: 'New project', data: {toggle: 'tooltip', placement: 'bottom', container: 'body'} do
                   = icon('plus fw')
@@ -34,7 +34,7 @@
                 = link_to sherlock_transactions_path, title: 'Sherlock Transactions',
                   data: {toggle: 'tooltip', placement: 'bottom', container: 'body'} do
                   = icon('tachometer fw')
-            %li
+            -# %li
               = link_to destroy_user_session_path, class: 'logout', method: :delete, title: 'Sign out', data: {toggle: 'tooltip', placement: 'bottom', container: 'body'} do
                 = icon('sign-out')
           - else

@@ -8,7 +8,7 @@
         = form_for [@project.namespace.becomes(Namespace), @project], remote: true, html: { multipart: true, class: "edit_project form-horizontal fieldset-form" }, authenticity_token: true do |f|
 
           %fieldset
-            .form-group.project_name_holder
+            -# .form-group.project_name_holder
               = f.label :name, class: 'control-label' do
                 Project name
               .col-sm-10
@@ -57,7 +57,7 @@
                     %br
                     %span.descr Submit changes to be merged upstream
 
-            .form-group
+            -# .form-group
               .col-sm-offset-2.col-sm-10
                 .checkbox
                   = f.label :builds_enabled do
@@ -75,7 +75,7 @@
                     %br
                     %span.descr Pages for project documentation
 
-            .form-group
+            -# .form-group
               .col-sm-offset-2.col-sm-10
                 .checkbox
                   = f.label :snippets_enabled do
@@ -118,7 +118,7 @@
 
 
 
-    .danger-settings
+    -# .danger-settings
       .panel.panel-default
         .panel-heading Housekeeping
         .errors-holder
@@ -168,7 +168,7 @@
       - else
         .nothing-here-block Only the project owner can archive a project
 
-      .panel.panel-default.panel.panel-warning
+      - .panel.panel-default.panel.panel-warning
         .panel-heading Rename repository
         .errors-holder
         .panel-body
