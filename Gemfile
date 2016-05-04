@@ -229,7 +229,7 @@ gem 'virtus',             '~> 1.0.1'
 gem 'net-ssh',            '~> 3.0.1'
 
 # Sentry integration
-gem 'sentry-raven', '~> 0.15'
+#gem 'sentry-raven', '~> 0.15'
 
 gem 'premailer-rails', '~> 1.9.0'
 
