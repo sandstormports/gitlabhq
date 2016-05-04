@@ -13,7 +13,11 @@ module Banzai
     #   :requested_path
     class RelativeLinkFilter < HTML::Pipeline::Filter
       def call
-        return doc unless linkable_files?
+        # sandstorm: always use this filter because it also fixes up 'should-use-relative-url-here'
+        # links.
+        # TODO: make a separate filter for that purpose.
+
+        #return doc unless linkable_files?
 
         doc.search('a:not(.gfm)').each do |el|
           process_link_attr el.attribute('href')
