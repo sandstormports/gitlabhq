@@ -625,7 +625,7 @@ class Project < ActiveRecord::Base
 
   def avatar_url
     if avatar.present?
-      [gitlab_config.url, avatar.url].join
+      avatar.url
     elsif avatar_in_git
       Gitlab::Routing.url_helpers.namespace_project_avatar_url(namespace, self)
     end
