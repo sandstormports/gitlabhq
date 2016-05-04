@@ -67,7 +67,7 @@ module ProjectsHelper
 
     project_link = link_to simple_sanitize(project.name), project_path(project), { class: "project-item-select-holder" }
 
-    if current_user
+    if false #current_user
       project_link << icon("chevron-down", class: "dropdown-toggle-caret js-projects-dropdown-toggle", data: { target: ".js-dropdown-menu-projects", toggle: "dropdown" })
     end
 
