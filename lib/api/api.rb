@@ -37,7 +37,7 @@ module API
     #mount Session
     #mount MergeRequests
     #mount Notes
-    #mount Internal
+    mount Internal
     #mount SystemHooks
     #mount ProjectSnippets
     #mount ProjectMembers
