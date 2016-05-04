@@ -38,6 +38,8 @@ module Banzai
         uri = URI(html_attr.value)
         if uri.relative? && uri.path.present?
           html_attr.value = rebuild_relative_uri(uri).to_s
+        elsif uri.host == "should-use-relative-url-here"
+          html_attr.value = uri.path
         end
       rescue URI::Error
         # noop
