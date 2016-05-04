@@ -4,6 +4,28 @@ class Dashboard::ProjectsController < Dashboard::ApplicationController
   before_action :event_filter
 
   def index
+    # begin sandstorm logic for creating automatically creating a repo
+    if current_user
+      g = Group.where(name: "gitlab").first
+      if !g
+        g = Group.new(name: "gitlab", path:"gitlab")
+        if g.save
+          g.add_owner(current_user)
+        else
+          Rails.logger.error "failed to create gitlab group"
+        end
+      end
+
+      p = Project.where(name: "repo").first
+      if !p
+        p = ::Projects::CreateService.new(current_user, name: "repo", path: "repo", visibility_level: "20", namespace_id: g.id).execute
+      end
+
+      redirect_to project_path(p)
+      return
+    end
+    # end sandstorm logic
+
     @projects = current_user.authorized_projects.sorted_by_activity
     @projects = filter_projects(@projects)
     @projects = @projects.includes(:namespace)
