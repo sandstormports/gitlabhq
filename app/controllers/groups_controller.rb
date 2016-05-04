@@ -37,6 +37,9 @@ class GroupsController < Groups::ApplicationController
   end
 
   def show
+    redirect_to '/gitlab/repo'
+    return
+
     @last_push = current_user.recent_push if current_user
 
     @projects = @projects.includes(:namespace)
