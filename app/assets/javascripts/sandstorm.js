@@ -1,4 +1,8 @@
 
+$(document).on('page:change', function () {
+  window.parent.postMessage({'setPath': window.location.pathname}, "*");
+})
+
 function sandstormGetWebkey(project_path) {
 
 var path_with_ext = project_path + ".git"
