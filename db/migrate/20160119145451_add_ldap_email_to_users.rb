@@ -1,9 +1,9 @@
 class AddLdapEmailToUsers < ActiveRecord::Migration
   def up
+    add_column :users, :ldap_email, :boolean, default: false, null: false
+
     # Sandstorm port does not support ldap
     return
-
-    add_column :users, :ldap_email, :boolean, default: false, null: false
 
     if Gitlab::Database.mysql?
       execute %{
