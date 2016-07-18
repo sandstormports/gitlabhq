@@ -1,8 +1,52 @@
 Please view this file on the master branch, on stable branches it's out of date.
 
-v 8.8.0 (unreleased)
+v 8.7.9
+  - Fix privilege escalation issue with OAuth external users.
+  - Ensure references to private repos aren't shown to logged-out users.
 
-v 8.7.1 (unreleased)
+v 8.7.8
+  - Fix visibility of snippets when searching.
+  - Update omniauth-saml to 1.6.0. !4951
+
+v 8.7.7
+  - Prevent unauthorized access to other projects build traces
+  - Forbid scripting for wiki files
+  - Only show notes through JSON on confidential issues that the user has access to
+
+v 8.7.6
+  - Fix links on wiki pages for relative url setups. !4131 (Artem Sidorenko)
+  - Fix import from GitLab.com to a private instance failure. !4181
+  - Fix external imports not finding the import data. !4106
+
+v 8.7.5
+  - Fix relative links in wiki pages. !4050
+  - Fix always showing build notification message when switching between merge requests !4086
+  - Fix an issue when filtering merge requests with more than one label. !3886
+
+v 8.7.4
+  - Links for Redmine issue references are generated correctly again !4048 (Benedikt Huss)
+  - Fix setting trusted proxies !3970
+  - Fix BitBucket importer bug when throwing exceptions !3941
+  - Use sign out path only if not empty !3989
+  - Running rake gitlab:db:drop_tables now drops tables with cascade !4020
+  - Running rake gitlab:db:drop_tables uses "IF EXISTS" as a precaution !4100
+  - Use a case-insensitive comparison in sanitizing URI schemes
+  - Fix always showing build notification message when switching between merge requests
+  - Links for Redmine issue references are generated correctly again (Benedikt Huss)
+
+v 8.7.3
+  - Emails, Gitlab::Email::Message, Gitlab::Diff, and Premailer::Adapter::Nokogiri are now instrumented
+  - Merge request widget displays TeamCity build state and code coverage correctly again.
+  - Fix the line code when importing PR review comments from GitHub. !4010
+  - Wikis are now initialized on legacy projects when checking repositories
+
+v 8.7.2
+  - The "New Branch" button is now loaded asynchronously
+  - Fix error 500 when trying to create a wiki page
+  - Updated spacing between notification label and button
+  - Label titles in filters are now escaped properly
+
+v 8.7.1
   - Prevent privilege escalation via "impersonate" feature
   - Prevent privilege escalation via notes API
   - Prevent privilege escalation via project webhook API
@@ -20,6 +64,8 @@ v 8.7.1 (unreleased)
   - Use the `can?` helper instead of `current_user.can?`. !3882
   - Fix Error 500 due to stale cache when projects are renamed or transferred
   - Fix .gitlab-ci.yml parsing issue when hidde job is a template without script definition
+  - Update width of search box to fix Safari bug. !3900 (Jedidiah)
+  - Use the `can?` helper instead of `current_user.can?`
 
 v 8.7.0
   - Gitlab::GitAccess and Gitlab::GitAccessWiki are now instrumented

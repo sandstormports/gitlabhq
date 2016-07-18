@@ -33,7 +33,7 @@ gem 'devise-async',           '~> 0.9.0'
 #gem 'omniauth-gitlab',        '~> 1.0.0'
 #gem 'omniauth-google-oauth2', '~> 0.2.0'
 #gem 'omniauth-kerberos',      '~> 0.3.0', group: :kerberos
-#gem 'omniauth-saml',          '~> 1.5.0'
+#gem 'omniauth-saml',          '~> 1.6.0'
 #gem 'omniauth-shibboleth',    '~> 1.2.0'
 #gem 'omniauth-twitter',       '~> 1.2.0'
 #gem 'omniauth_crowd',         '~> 2.2.0'

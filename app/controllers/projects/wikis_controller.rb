@@ -16,6 +16,9 @@ class Projects::WikisController < Projects::ApplicationController
     if @page
       render 'show'
     elsif file = @project_wiki.find_file(params[:id], params[:version_id])
+      response.headers['Content-Security-Policy'] = "default-src 'none'"
+      response.headers['X-Content-Security-Policy'] = "default-src 'none'"
+
       if file.on_disk?
         send_file file.on_disk_path, disposition: 'inline'
       else
@@ -40,9 +43,9 @@ class Projects::WikisController < Projects::ApplicationController
   end
 
   def update
-    @page = @project_wiki.find_page(params[:id])
-
     return render('empty') unless can?(current_user, :create_wiki, @project)
+
+    @page = @project_wiki.find_page(params[:id])
 
     if @page = WikiPages::UpdateService.new(@project, current_user, wiki_params).execute(@page)
       redirect_to(
