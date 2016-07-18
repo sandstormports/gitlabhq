@@ -15,7 +15,6 @@ module Banzai
       def call
         # sandstorm: always use this filter because it also fixes up 'should-use-relative-url-here'
         # links.
-        # TODO: make a separate filter for that purpose.
 
         #return doc unless linkable_files?
 
@@ -27,10 +26,23 @@ module Banzai
           process_link_attr el.attribute('src')
         end
 
+        doc.search('a:not(.gfm)').each do |el|
+          sandstorm_external_links el
+        end
+
         doc
       end
 
       protected
+
+      def sandstorm_external_links(el)
+        uri = URI(el.attribute('href').value)
+        if !uri.relative?
+          el.set_attribute('target', '_blank')
+        end
+      rescue URI::Error
+        # noop
+      end
 
       def linkable_files?
         context[:project_wiki].nil? && repository.try(:exists?) && !repository.empty?
@@ -40,7 +52,7 @@ module Banzai
         return if html_attr.blank?
 
         uri = URI(html_attr.value)
-        if uri.relative? && uri.path.present?
+        if linkable_files? && uri.relative? && uri.path.present?
           html_attr.value = rebuild_relative_uri(uri).to_s
         elsif uri.host == "should-use-relative-url-here"
           html_attr.value = uri.path
