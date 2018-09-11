@@ -10,8 +10,8 @@ describe Gitlab::Ci::Build::Artifacts::Metadata::Entry do
       'path/dir_1/subdir/subfile' => { size: 10 },
       'path/second_dir' => {},
       'path/second_dir/dir_3/file_2' => { size: 10 },
-      'path/second_dir/dir_3/file_3'=> { size: 10 },
-      'another_directory/'=> {},
+      'path/second_dir/dir_3/file_3' => { size: 10 },
+      'another_directory/' => {},
       'another_file' => {},
       '/file/with/absolute_path' => {} }
   end
@@ -122,19 +122,29 @@ describe Gitlab::Ci::Build::Artifacts::Metadata::Entry do
 
   describe 'empty path', path: '' do
     subject { |example| path(example) }
-    it { is_expected.to_not have_parent }
+    it { is_expected.not_to have_parent }
 
     describe '#children' do
       subject { |example| path(example).children }
       it { expect(subject.count).to eq 3 }
     end
-
   end
 
   describe 'path/dir_1/subdir/subfile', path: 'path/dir_1/subdir/subfile' do
     describe '#nodes' do
       subject { |example| path(example).nodes }
       it { is_expected.to eq 4 }
+    end
+
+    describe '#blob' do
+      let(:file_entry) { |example| path(example) }
+      subject { file_entry.blob }
+
+      it 'returns a blob representing the entry data' do
+        expect(subject).to be_a(Blob)
+        expect(subject.path).to eq(file_entry.path)
+        expect(subject.size).to eq(file_entry.metadata[:size])
+      end
     end
   end
 

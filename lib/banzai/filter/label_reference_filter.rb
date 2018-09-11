@@ -1,39 +1,58 @@
+# frozen_string_literal: true
+
 module Banzai
   module Filter
     # HTML filter that replaces label references with links.
     class LabelReferenceFilter < AbstractReferenceFilter
+      self.reference_type = :label
+
       def self.object_class
         Label
       end
 
-      def find_object(project, id)
-        project.labels.find(id)
+      def find_object(parent_object, id)
+        find_labels(parent_object).find(id)
       end
 
       def self.references_in(text, pattern = Label.reference_pattern)
-        text.gsub(pattern) do |match|
-          yield match, $~[:label_id].to_i, $~[:label_name], $~[:project], $~
+        unescape_html_entities(text).gsub(pattern) do |match|
+          yield match, $~[:label_id].to_i, $~[:label_name], $~[:project], $~[:namespace], $~
         end
       end
 
       def references_in(text, pattern = Label.reference_pattern)
-        text.gsub(pattern) do |match|
-          label = find_label($~[:project], $~[:label_id], $~[:label_name])
+        unescape_html_entities(text).gsub(pattern) do |match|
+          namespace, project = $~[:namespace], $~[:project]
+          project_path = full_project_path(namespace, project)
+          label = find_label(project_path, $~[:label_id], $~[:label_name])
 
           if label
-            yield match, label.id, $~[:project], $~
+            yield match, label.id, project, namespace, $~
           else
             match
           end
         end
       end
 
-      def find_label(project_ref, label_id, label_name)
-        project = project_from_ref(project_ref)
-        return unless project
+      def find_label(parent_ref, label_id, label_name)
+        parent = parent_from_ref(parent_ref)
+        return unless parent
 
         label_params = label_params(label_id, label_name)
-        project.labels.find_by(label_params)
+        find_labels(parent).find_by(label_params)
+      end
+
+      def find_labels(parent)
+        params = if parent.is_a?(Group)
+                   { group_id: parent.id,
+                     include_ancestor_groups: true,
+                     only_group_labels: true }
+                 else
+                   { project_id: parent.id,
+                     include_ancestor_groups: true }
+                 end
+
+        LabelsFinder.new(nil, params).execute(skip_authorization: true)
       end
 
       # Parameters to pass to `Label.find_by` based on the given arguments
@@ -51,18 +70,41 @@ module Banzai
         end
       end
 
-      def url_for_object(label, project)
+      def url_for_object(label, parent)
         h = Gitlab::Routing.url_helpers
-        h.namespace_project_issues_url(project.namespace, project, label_name: label.name,
-                                                                   only_path:  context[:only_path])
+
+        if parent.is_a?(Project)
+          h.project_issues_url(parent, label_name: label.name, only_path: context[:only_path])
+        elsif context[:label_url_method]
+          h.public_send(context[:label_url_method], parent, label_name: label.name, only_path: context[:only_path]) # rubocop:disable GitlabSecurity/PublicSend
+        end
       end
 
       def object_link_text(object, matches)
-        if context[:project] == object.project
-          LabelsHelper.render_colored_label(object)
-        else
-          LabelsHelper.render_colored_cross_project_label(object)
+        label_suffix = ''
+
+        if project || full_path_ref?(matches)
+          project_path    = full_project_path(matches[:namespace], matches[:project])
+          parent_from_ref = from_ref_cached(project_path)
+          reference       = parent_from_ref.to_human_reference(project || group)
+
+          label_suffix = " <i>in #{reference}</i>" if reference.present?
         end
+
+        LabelsHelper.render_colored_label(object, label_suffix)
+      end
+
+      def full_path_ref?(matches)
+        matches[:namespace] && matches[:project]
+      end
+
+      def unescape_html_entities(text)
+        CGI.unescapeHTML(text.to_s)
+      end
+
+      def object_link_title(object, matches)
+        # use title of wrapped element instead
+        nil
       end
     end
   end

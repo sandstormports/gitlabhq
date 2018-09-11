@@ -6,41 +6,131 @@
 #   klass - actual class like Issue or MergeRequest
 #   current_user - which user use
 #   params:
-#     scope: 'created-by-me' or 'assigned-to-me' or 'all'
-#     state: 'open' or 'closed' or 'all'
+#     scope: 'created_by_me' or 'assigned_to_me' or 'all'
+#     state: 'opened' or 'closed' or 'locked' or 'all'
 #     group_id: integer
 #     project_id: integer
 #     milestone_title: string
+#     author_id: integer
 #     assignee_id: integer
 #     search: string
 #     label_name: string
 #     sort: string
+#     non_archived: boolean
+#     iids: integer[]
+#     my_reaction_emoji: string
+#     created_after: datetime
+#     created_before: datetime
+#     updated_after: datetime
+#     updated_before: datetime
+#     use_cte_for_search: boolean
 #
-require_relative 'projects_finder'
-
 class IssuableFinder
-  NONE = '0'
+  prepend FinderWithCrossProjectAccess
+  include FinderMethods
+  include CreatedAtFilter
+
+  requires_cross_project_access unless: -> { project? }
+
+  NONE = '0'.freeze
 
   attr_accessor :current_user, :params
 
-  def initialize(current_user, params)
+  def self.scalar_params
+    @scalar_params ||= %i[
+      assignee_id
+      assignee_username
+      author_id
+      author_username
+      authorized_only
+      group_id
+      iids
+      label_name
+      milestone_title
+      my_reaction_emoji
+      non_archived
+      project_id
+      scope
+      search
+      sort
+      state
+      include_subgroups
+      use_cte_for_search
+    ]
+  end
+
+  def self.array_params
+    @array_params ||= { label_name: [], iids: [], assignee_username: [] }
+  end
+
+  def self.valid_params
+    @valid_params ||= scalar_params + [array_params]
+  end
+
+  def initialize(current_user, params = {})
     @current_user = current_user
     @params = params
   end
 
   def execute
     items = init_collection
+    items = filter_items(items)
+
+    # This has to be last as we may use a CTE as an optimization fence by
+    # passing the use_cte_for_search param
+    # https://www.postgresql.org/docs/current/static/queries-with.html
+    items = by_search(items)
+
+    sort(items)
+  end
+
+  def filter_items(items)
+    items = by_project(items)
     items = by_scope(items)
+    items = by_created_at(items)
+    items = by_updated_at(items)
     items = by_state(items)
     items = by_group(items)
-    items = by_project(items)
-    items = by_search(items)
-    items = by_milestone(items)
     items = by_assignee(items)
     items = by_author(items)
+    items = by_non_archived(items)
+    items = by_iids(items)
+    items = by_milestone(items)
     items = by_label(items)
-    items = by_due_date(items)
-    sort(items)
+    by_my_reaction_emoji(items)
+  end
+
+  def row_count
+    Gitlab::IssuablesCountForState.new(self).for_state_or_opened(params[:state])
+  end
+
+  # We often get counts for each state by running a query per state, and
+  # counting those results. This is typically slower than running one query
+  # (even if that query is slower than any of the individual state queries) and
+  # grouping and counting within that query.
+  #
+  def count_by_state
+    count_params = params.merge(state: nil, sort: nil)
+    finder = self.class.new(current_user, count_params)
+    counts = Hash.new(0)
+
+    # Searching by label includes a GROUP BY in the query, but ours will be last
+    # because it is added last. Searching by multiple labels also includes a row
+    # per issuable, so we have to count those in Ruby - which is bad, but still
+    # better than performing multiple queries.
+    #
+    # This does not apply when we are using a CTE for the search, as the labels
+    # GROUP BY is inside the subquery in that case, so we set labels_count to 1.
+    labels_count = label_names.any? ? label_names.count : 1
+    labels_count = 1 if use_cte_for_search?
+
+    finder.execute.reorder(nil).group(:state).count.each do |key, value|
+      counts[Array(key).last.to_sym] += value / labels_count
+    end
+
+    counts[:all] = counts.values.sum
+
+    counts.with_indifferent_access
   end
 
   def group
@@ -61,31 +151,26 @@ class IssuableFinder
   def project
     return @project if defined?(@project)
 
-    if project?
-      @project = Project.find(params[:project_id])
+    project = Project.find(params[:project_id])
+    project = nil unless Ability.allowed?(current_user, :"read_#{klass.to_ability_name}", project)
 
-      unless Ability.abilities.allowed?(current_user, :read_project, @project)
-        @project = nil
-      end
-    else
-      @project = nil
-    end
-
-    @project
+    @project = project
   end
 
-  def projects
-    return @projects if defined?(@projects)
+  def projects(items = nil)
+    return @projects = project if project?
 
-    if project?
-      @projects = project
-    elsif current_user && params[:authorized_only].presence && !current_user_related?
-      @projects = current_user.authorized_projects.reorder(nil)
-    elsif group
-      @projects = GroupProjectsFinder.new(group).execute(current_user).reorder(nil)
-    else
-      @projects = ProjectsFinder.new.execute(current_user).reorder(nil)
-    end
+    projects =
+      if current_user && params[:authorized_only].presence && !current_user_related?
+        current_user.authorized_projects
+      elsif group
+        finder_options = { include_subgroups: params[:include_subgroups], only_owned: true }
+        GroupProjectsFinder.new(group: group, current_user: current_user, options: finder_options).execute
+      else
+        ProjectsFinder.new(current_user: current_user).execute
+      end
+
+    @projects = projects.with_feature_available_for_user(klass, current_user).reorder(nil)
   end
 
   def search
@@ -105,11 +190,19 @@ class IssuableFinder
 
     @milestones =
       if milestones?
-        scope = Milestone.where(project_id: projects)
+        if project?
+          group_id = project.group&.id
+          project_id = project.id
+        end
 
-        scope.where(title: params[:milestone_title])
+        group_id = group.id if group
+
+        search_params =
+          { title: params[:milestone_title], project_ids: project_id, group_ids: group_id }
+
+        MilestonesFinder.new(search_params).execute
       else
-        nil
+        Milestone.none
       end
   end
 
@@ -124,42 +217,61 @@ class IssuableFinder
   def labels
     return @labels if defined?(@labels)
 
-    if labels? && !filter_by_no_label?
-      @labels = Label.where(title: label_names)
-
-      if projects
-        @labels = @labels.where(project: projects)
+    @labels =
+      if labels? && !filter_by_no_label?
+        LabelsFinder.new(current_user, project_ids: projects, title: label_names).execute(skip_authorization: true)
+      else
+        Label.none
       end
-    else
-      @labels = Label.none
-    end
   end
 
-  def assignee?
-    params[:assignee_id].present?
+  def assignee_id?
+    params[:assignee_id].present? && params[:assignee_id] != NONE
+  end
+
+  def assignee_username?
+    params[:assignee_username].present? && params[:assignee_username] != NONE
+  end
+
+  def no_assignee?
+    # Assignee_id takes precedence over assignee_username
+    params[:assignee_id] == NONE || params[:assignee_username] == NONE
   end
 
   def assignee
     return @assignee if defined?(@assignee)
 
     @assignee =
-      if assignee? && params[:assignee_id] != NONE
-        User.find(params[:assignee_id])
+      if assignee_id?
+        User.find_by(id: params[:assignee_id])
+      elsif assignee_username?
+        User.find_by(username: params[:assignee_username])
       else
         nil
       end
   end
 
-  def author?
-    params[:author_id].present?
+  def author_id?
+    params[:author_id].present? && params[:author_id] != NONE
+  end
+
+  def author_username?
+    params[:author_username].present? && params[:author_username] != NONE
+  end
+
+  def no_author?
+    # author_id takes precedence over author_username
+    params[:author_id] == NONE || params[:author_username] == NONE
   end
 
   def author
     return @author if defined?(@author)
 
     @author =
-      if author? && params[:author_id] != NONE
-        User.find(params[:author_id])
+      if author_id?
+        User.find_by(id: params[:author_id])
+      elsif author_username?
+        User.find_by(username: params[:author_username])
       else
         nil
       end
@@ -172,28 +284,37 @@ class IssuableFinder
   end
 
   def by_scope(items)
+    return items.none if current_user_related? && !current_user
+
     case params[:scope]
-    when 'created-by-me', 'authored'
+    when 'created_by_me', 'authored'
       items.where(author_id: current_user.id)
-    when 'assigned-to-me'
-      items.where(assignee_id: current_user.id)
+    when 'assigned_to_me'
+      items.assigned_to(current_user)
     else
       items
     end
   end
 
+  def by_updated_at(items)
+    items = items.updated_after(params[:updated_after]) if params[:updated_after].present?
+    items = items.updated_before(params[:updated_before]) if params[:updated_before].present?
+
+    items
+  end
+
   def by_state(items)
-    case params[:state]
+    case params[:state].to_s
     when 'closed'
       items.closed
     when 'merged'
       items.respond_to?(:merged) ? items.merged : items.closed
-    when 'all'
-      items
     when 'opened'
       items.opened
+    when 'locked'
+      items.where(state: 'locked')
     else
-      raise 'You must specify default state'
+      items
     end
   end
 
@@ -215,29 +336,55 @@ class IssuableFinder
     items
   end
 
-  def by_search(items)
-    items = items.search(search) if search
+  def use_cte_for_search?
+    return false unless search
+    return false unless Gitlab::Database.postgresql?
 
-    items
+    params[:use_cte_for_search]
+  end
+
+  def by_search(items)
+    return items unless search
+
+    if use_cte_for_search?
+      cte = Gitlab::SQL::RecursiveCTE.new(klass.table_name)
+      cte << items
+
+      items = klass.with(cte.to_arel).from(klass.table_name)
+    end
+
+    items.full_search(search)
+  end
+
+  def by_iids(items)
+    params[:iids].present? ? items.where(iid: params[:iids]) : items
   end
 
   def sort(items)
     # Ensure we always have an explicit sort order (instead of inheriting
     # multiple orders when combining ActiveRecord::Relation objects).
-    params[:sort] ? items.sort(params[:sort]) : items.reorder(id: :desc)
+    params[:sort] ? items.sort_by_attribute(params[:sort], excluded_labels: label_names) : items.reorder(id: :desc)
   end
 
   def by_assignee(items)
-    if assignee?
-      items = items.where(assignee_id: assignee.try(:id))
+    if assignee
+      items = items.where(assignee_id: assignee.id)
+    elsif no_assignee?
+      items = items.where(assignee_id: nil)
+    elsif assignee_id? || assignee_username? # assignee not found
+      items = items.none
     end
 
     items
   end
 
   def by_author(items)
-    if author?
-      items = items.where(author_id: author.try(:id))
+    if author
+      items = items.where(author_id: author.id)
+    elsif no_author?
+      items = items.where(author_id: nil)
+    elsif author_id? || author_username? # author not found
+      items = items.none
     end
 
     items
@@ -247,19 +394,21 @@ class IssuableFinder
     params[:milestone_title] == Milestone::Upcoming.name
   end
 
+  def filter_by_started_milestone?
+    params[:milestone_title] == Milestone::Started.name
+  end
+
   def by_milestone(items)
     if milestones?
       if filter_by_no_milestone?
-        items = items.where(milestone_id: [-1, nil])
+        items = items.left_joins_milestones.where(milestone_id: [-1, nil])
       elsif filter_by_upcoming_milestone?
-        upcoming = Milestone.where(project_id: projects).upcoming
-        items = items.joins(:milestone).where(milestones: { title: upcoming.try(:title) })
+        upcoming_ids = Milestone.upcoming_ids_by_projects(projects(items))
+        items = items.left_joins_milestones.where(milestone_id: upcoming_ids)
+      elsif filter_by_started_milestone?
+        items = items.left_joins_milestones.where('milestones.start_date <= NOW()')
       else
-        items = items.joins(:milestone).where(milestones: { title: params[:milestone_title] })
-
-        if projects
-          items = items.where(milestones: { project_id: projects })
-        end
+        items = items.with_milestone(params[:milestone_title])
       end
     end
 
@@ -267,61 +416,40 @@ class IssuableFinder
   end
 
   def by_label(items)
-    if labels?
+    return items unless labels?
+
+    items =
       if filter_by_no_label?
-        items = items.without_label
+        items.without_label
       else
-        items = items.with_label(label_names)
-        if projects
-          items = items.where(labels: { project_id: projects })
-        end
+        items.with_label(label_names, params[:sort])
       end
-    end
 
     items
   end
 
-  def by_due_date(items)
-    if due_date?
-      if filter_by_no_due_date?
-        items = items.without_due_date
-      elsif filter_by_overdue?
-        items = items.due_before(Date.today)
-      elsif filter_by_due_this_week?
-        items = items.due_between(Date.today.beginning_of_week, Date.today.end_of_week)
-      elsif filter_by_due_this_month?
-        items = items.due_between(Date.today.beginning_of_month, Date.today.end_of_month)
-      end
+  def by_my_reaction_emoji(items)
+    if params[:my_reaction_emoji].present? && current_user
+      items = items.awarded(current_user, params[:my_reaction_emoji])
     end
 
     items
-  end
-
-  def filter_by_no_due_date?
-    due_date? && params[:due_date] == Issue::NoDueDate.name
-  end
-
-  def filter_by_overdue?
-    due_date? && params[:due_date] == Issue::Overdue.name
-  end
-
-  def filter_by_due_this_week?
-    due_date? && params[:due_date] == Issue::DueThisWeek.name
-  end
-
-  def filter_by_due_this_month?
-    due_date? && params[:due_date] == Issue::DueThisMonth.name
-  end
-
-  def due_date?
-    params[:due_date].present? && klass.column_names.include?('due_date')
   end
 
   def label_names
-    params[:label_name].is_a?(String) ? params[:label_name].split(',') : params[:label_name]
+    if labels?
+      params[:label_name].is_a?(String) ? params[:label_name].split(',') : params[:label_name]
+    else
+      []
+    end
+  end
+
+  def by_non_archived(items)
+    params[:non_archived].present? ? items.non_archived : items
   end
 
   def current_user_related?
-    params[:scope] == 'created-by-me' || params[:scope] == 'authored' || params[:scope] == 'assigned-to-me'
+    scope = params[:scope]
+    scope == 'created_by_me' || scope == 'authored' || scope == 'assigned_to_me'
   end
 end

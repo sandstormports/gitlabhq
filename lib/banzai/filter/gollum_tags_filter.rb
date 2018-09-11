@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Banzai
   module Filter
     # HTML Filter for parsing Gollum's tags in HTML. It's only parses the
@@ -51,13 +53,18 @@ module Banzai
       # See https://github.com/gollum/gollum/wiki
       #
       # Rubular: http://rubular.com/r/7dQnE5CUCH
-      TAGS_PATTERN = %r{\[\[(.+?)\]\]}.freeze
+      TAGS_PATTERN = /\[\[(.+?)\]\]/.freeze
 
       # Pattern to match allowed image extensions
-      ALLOWED_IMAGE_EXTENSIONS = %r{.+(jpg|png|gif|svg|bmp)\z}i.freeze
+      ALLOWED_IMAGE_EXTENSIONS = /.+(jpg|png|gif|svg|bmp)\z/i.freeze
+
+      # Do not perform linking inside these tags.
+      IGNORED_ANCESTOR_TAGS = %w(pre code tt).to_set
 
       def call
-        search_text_nodes(doc).each do |node|
+        doc.search(".//text()").each do |node|
+          next if has_ancestor?(node, IGNORED_ANCESTOR_TAGS)
+
           # A Gollum ToC tag is `[[_TOC_]]`, but due to MarkdownFilter running
           # before this one, it will be converted into `[[<em>TOC</em>]]`, so it
           # needs special-case handling
@@ -118,7 +125,7 @@ module Banzai
         end
 
         if path
-          content_tag(:img, nil, src: path, class: 'gfm')
+          content_tag(:img, nil, data: { src: path }, class: 'gfm')
         end
       end
 
@@ -149,11 +156,12 @@ module Banzai
           name, reference = *parts.compact.map(&:strip)
         end
 
-        if url?(reference)
-          href = reference
-        else
-          href = ::File.join(project_wiki_base_path, reference)
-        end
+        href =
+          if url?(reference)
+            reference
+          else
+            ::File.join(project_wiki_base_path, reference)
+          end
 
         content_tag(:a, name || reference, href: href, class: 'gfm')
       end

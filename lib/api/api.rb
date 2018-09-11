@@ -1,62 +1,154 @@
-Dir["#{Rails.root}/lib/api/*.rb"].each {|file| require file}
-
 module API
   class API < Grape::API
-    #include APIGuard
-    version 'v3', using: :path
+    include APIGuard
+
+    LOG_FILENAME = Rails.root.join("log", "api_json.log")
+
+    NO_SLASH_URL_PART_REGEX = %r{[^/]+}
+    PROJECT_ENDPOINT_REQUIREMENTS = { id: NO_SLASH_URL_PART_REGEX }.freeze
+    COMMIT_ENDPOINT_REQUIREMENTS = PROJECT_ENDPOINT_REQUIREMENTS.merge(sha: NO_SLASH_URL_PART_REGEX).freeze
+
+    insert_before Grape::Middleware::Error,
+                  GrapeLogging::Middleware::RequestLogger,
+                  logger: Logger.new(LOG_FILENAME),
+                  formatter: Gitlab::GrapeLogging::Formatters::LogrageWithTimestamp.new,
+                  include: [
+                    GrapeLogging::Loggers::FilterParameters.new,
+                    GrapeLogging::Loggers::ClientEnv.new,
+                    Gitlab::GrapeLogging::Loggers::UserLogger.new,
+                    Gitlab::GrapeLogging::Loggers::QueueDurationLogger.new
+                  ]
+
+    allow_access_with_scope :api
+    prefix :api
+
+    version 'v3', using: :path do
+      route :any, '*path' do
+        error!('API V3 is no longer supported. Use API V4 instead.', 410)
+      end
+    end
+
+    version 'v4', using: :path
+
+    before do
+      header['X-Frame-Options'] = 'SAMEORIGIN'
+      header['X-Content-Type-Options'] = 'nosniff'
+    end
+
+    # The locale is set to the current user's locale when `current_user` is loaded
+    after { Gitlab::I18n.use_default_locale }
+
+    rescue_from Gitlab::Access::AccessDeniedError do
+      rack_response({ 'message' => '403 Forbidden' }.to_json, 403)
+    end
 
     rescue_from ActiveRecord::RecordNotFound do
       rack_response({ 'message' => '404 Not found' }.to_json, 404)
     end
 
+    rescue_from UploadedFile::InvalidPathError do |e|
+      rack_response({ 'message' => e.message }.to_json, 400)
+    end
+
+    rescue_from ObjectStorage::RemoteStoreError do |e|
+      rack_response({ 'message' => e.message }.to_json, 500)
+    end
+
+    # Retain 405 error rather than a 500 error for Grape 0.15.0+.
+    # https://github.com/ruby-grape/grape/blob/a3a28f5b5dfbb2797442e006dbffd750b27f2a76/UPGRADING.md#changes-to-method-not-allowed-routes
+    rescue_from Grape::Exceptions::MethodNotAllowed do |e|
+      error! e.message, e.status, e.headers
+    end
+
+    rescue_from Grape::Exceptions::Base do |e|
+      error! e.message, e.status, e.headers
+    end
+
+    rescue_from Gitlab::Auth::TooManyIps do |e|
+      rack_response({ 'message' => '403 Forbidden' }.to_json, 403)
+    end
+
     rescue_from :all do |exception|
-      # lifted from https://github.com/rails/rails/blob/master/actionpack/lib/action_dispatch/middleware/debug_exceptions.rb#L60
-      # why is this not wrapped in something reusable?
-      trace = exception.backtrace
-
-      message = "\n#{exception.class} (#{exception.message}):\n"
-      message << exception.annoted_source_code.to_s if exception.respond_to?(:annoted_source_code)
-      message << "  " << trace.join("\n  ")
-
-      API.logger.add Logger::FATAL, message
-      rack_response({ 'message' => '500 Internal Server Error' }.to_json, 500)
+      handle_api_exception(exception)
     end
 
     format :json
     content_type :txt, "text/plain"
 
-    helpers Helpers
+    # Ensure the namespace is right, otherwise we might load Grape::API::Helpers
+    helpers ::SentryHelper
+    helpers ::API::Helpers
+    helpers ::API::Helpers::CommonHelpers
 
-    #mount Groups
-    #mount GroupMembers
-    #mount Users
-    #mount Projects
-    #mount Repositories
-    #mount Issues
-    #mount Milestones
-    #mount Session
-    #mount MergeRequests
-    #mount Notes
-    mount Internal
-    #mount SystemHooks
-    #mount ProjectSnippets
-    #mount ProjectMembers
-    #mount DeployKeys
-    #mount ProjectHooks
-    #mount Services
-    #mount Files
-    #mount Commits
-    #mount CommitStatus
-    #mount Namespaces
-    #mount Branches
-    #mount Labels
-    #mount Settings
-    #mount Keys
-    #mount Tags
-    #mount Triggers
-    #mount Builds
-    #mount Variables
-    #mount Runners
-    #mount Licenses
+    # Keep in alphabetical order
+    mount ::API::AccessRequests
+    mount ::API::Applications
+    mount ::API::Avatar
+    mount ::API::AwardEmoji
+    mount ::API::Badges
+    mount ::API::Boards
+    mount ::API::Branches
+    mount ::API::BroadcastMessages
+    mount ::API::CircuitBreakers
+    mount ::API::Commits
+    mount ::API::CommitStatuses
+    mount ::API::DeployKeys
+    mount ::API::Deployments
+    mount ::API::Environments
+    mount ::API::Events
+    mount ::API::Features
+    mount ::API::Files
+    mount ::API::GroupBoards
+    mount ::API::Groups
+    mount ::API::GroupMilestones
+    mount ::API::Internal
+    mount ::API::Issues
+    mount ::API::Jobs
+    mount ::API::JobArtifacts
+    mount ::API::Keys
+    mount ::API::Labels
+    mount ::API::Lint
+    mount ::API::Markdown
+    mount ::API::Members
+    mount ::API::MergeRequestDiffs
+    mount ::API::MergeRequests
+    mount ::API::Namespaces
+    mount ::API::Notes
+    mount ::API::Discussions
+    mount ::API::NotificationSettings
+    mount ::API::PagesDomains
+    mount ::API::Pipelines
+    mount ::API::PipelineSchedules
+    mount ::API::ProjectExport
+    mount ::API::ProjectImport
+    mount ::API::ProjectHooks
+    mount ::API::Projects
+    mount ::API::ProjectMilestones
+    mount ::API::ProjectSnapshots
+    mount ::API::ProjectSnippets
+    mount ::API::ProtectedBranches
+    mount ::API::Repositories
+    mount ::API::Runner
+    mount ::API::Runners
+    mount ::API::Search
+    mount ::API::Services
+    mount ::API::Settings
+    mount ::API::SidekiqMetrics
+    mount ::API::Snippets
+    mount ::API::Subscriptions
+    mount ::API::SystemHooks
+    mount ::API::Tags
+    mount ::API::Templates
+    mount ::API::Todos
+    mount ::API::Triggers
+    mount ::API::Users
+    mount ::API::Variables
+    mount ::API::GroupVariables
+    mount ::API::Version
+    mount ::API::Wikis
+
+    route :any, '*path' do
+      error!('404 Not Found', 404)
+    end
   end
 end

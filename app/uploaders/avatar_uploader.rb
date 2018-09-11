@@ -1,17 +1,26 @@
-# encoding: utf-8
+# frozen_string_literal: true
 
-class AvatarUploader < CarrierWave::Uploader::Base
+class AvatarUploader < GitlabUploader
   include UploaderHelper
+  include RecordsUploads::Concern
+  include ObjectStorage::Concern
+  prepend ObjectStorage::Extension::RecordsUploads
 
-  storage :file
-
-  after :store, :reset_events_cache
-
-  def store_dir
-    "uploads/#{model.class.to_s.underscore}/#{mounted_as}/#{model.id}"
+  def exists?
+    model.avatar.file && model.avatar.file.present?
   end
 
-  def reset_events_cache(file)
-    model.reset_events_cache if model.is_a?(User)
+  def move_to_store
+    false
+  end
+
+  def move_to_cache
+    false
+  end
+
+  private
+
+  def dynamic_segment
+    File.join(model.class.to_s.underscore, mounted_as.to_s, model.id.to_s)
   end
 end

@@ -1,155 +1,299 @@
-# GitLab Contributing Process
+## GitLab core team & GitLab Inc. contribution process
+
+---
+
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+**Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
+
+- [Purpose of describing the contributing process](#purpose-of-describing-the-contributing-process)
+- [Common actions](#common-actions)
+  - [Merge request coaching](#merge-request-coaching)
+- [Assigning issues](#assigning-issues)
+- [Be kind](#be-kind)
+- [Feature freeze on the 7th for the release on the 22nd](#feature-freeze-on-the-7th-for-the-release-on-the-22nd)
+  - [Between the 1st and the 7th](#between-the-1st-and-the-7th)
+  - [On the 7th](#on-the-7th)
+  - [After the 7th](#after-the-7th)
+- [Regressions](#regressions)
+  - [How to manage a regression](#how-to-manage-a-regression)
+- [Release retrospective and kickoff](#release-retrospective-and-kickoff)
+  - [Retrospective](#retrospective)
+  - [Kickoff](#kickoff)
+- [Copy & paste responses](#copy--paste-responses)
+  - [Improperly formatted issue](#improperly-formatted-issue)
+  - [Issue report for old version](#issue-report-for-old-version)
+  - [Support requests and configuration questions](#support-requests-and-configuration-questions)
+  - [Code format](#code-format)
+  - [Issue fixed in newer version](#issue-fixed-in-newer-version)
+  - [Improperly formatted merge request](#improperly-formatted-merge-request)
+  - [Inactivity close of an issue](#inactivity-close-of-an-issue)
+  - [Inactivity close of a merge request](#inactivity-close-of-a-merge-request)
+  - [Accepting merge requests](#accepting-merge-requests)
+  - [Only accepting merge requests with green tests](#only-accepting-merge-requests-with-green-tests)
+  - [Closing down the issue tracker on GitHub](#closing-down-the-issue-tracker-on-github)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
+---
 
 ## Purpose of describing the contributing process
 
-Below we describe the contributing process to GitLab for two reasons. So that
-contributors know what to expect from maintainers (possible responses, friendly
-treatment, etc.). And so that maintainers know what to expect from contributors
-(use the latest version, ensure that the issue is addressed, friendly treatment,
-etc.).
+Below we describe the contributing process to GitLab for two reasons:
+
+1. Contributors know what to expect from maintainers (possible responses, friendly
+  treatment, etc.)
+1. Maintainers know what to expect from contributors (use the latest version,
+  ensure that the issue is addressed, friendly treatment, etc.).
+
+- [GitLab Inc engineers should refer to the engineering workflow document](https://about.gitlab.com/handbook/engineering/workflow/)
 
 ## Common actions
 
-### Issue team
+### Merge request coaching
 
-- Looks for issues without [workflow labels](#how-we-handle-issues) and triages
-  issue
-- Closes invalid issues with a comment (duplicates,
-  [fixed in newer version](#issue-fixed-in-newer-version),
-  [issue report for old version](#issue-report-for-old-version), not a problem
-  in GitLab, etc.)
-- Asks for feedback from issue reporter
-  ([invalid issue reports](#improperly-formatted-issue),
-  [format code](#code-format), etc.)
-- Monitors all issues for feedback (but especially ones commented on since
-  automatically watching them)
-- Closes issues with no feedback from the reporter for two weeks
+Several people from the [GitLab team][team] are helping community members to get
+their contributions accepted by meeting our [Definition of done][done].
 
-### Merge marshall & merge request coach
-
-- Responds to merge requests the issue team mentions them in and monitors for
-  new merge requests
-- Provides feedback to the merge request submitter to improve the merge request
-  (style, tests, etc.)
-- Mark merge requests `Ready for Merge` when they meet the
-  [contribution acceptance criteria]
-- Mention developer(s) based on the
-  [list of members and their specialities][team]
-- Closes merge requests with no feedback from the reporter for two weeks
-
-## Priorities of the issue team
-
-1. Mentioning people (critical)
-1. Workflow labels (normal)
-1. Functional labels (minor)
-1. Assigning issues (avoid if possible)
-
-## Mentioning people
-
-The most important thing is making sure valid issues receive feedback from the
-development team. Therefore the priority is mentioning developers that can help
-on those issue. Please select someone with relevant experience from
-[GitLab core team][core-team]. If there is nobody mentioned with that expertise
-look in the commit history for the affected files to find someone. Avoid
-mentioning the lead developer, this is the person that is least likely to give a
-timely response. If the involvement of the lead developer is needed the other
-core team members will mention this person.
-
-## Workflow labels
-
-Workflow labels are purposely not very detailed since that would be hard to keep
-updated as you would need to re-evaluate them after every comment. We optionally
-use functional labels on demand when want to group related issues to get an
-overview (for example all issues related to RVM, to tackle them in one go) and
-to add details to the issue.
-
-- ~"Awaiting Feedback" Feedback pending from the reporter
-- ~UX needs help from a UX designer
-- ~Frontend needs help from a Front-end engineer. Please follow the
-  ["Implement design & UI elements" guidelines].
-- ~up-for-grabs is an issue suitable for first-time contributors, of reasonable difficulty and size. Not exclusive with other labels.
-- ~"feature proposal" is a proposal for a new feature for GitLab. People are encouraged to vote
-in support or comment for further detail. Do not use `feature request`.
-- ~bug is an issue reporting undesirable or incorrect behavior.
-- ~customer is an issue reported by enterprise subscribers. This label should
-be accompanied by *bug* or *feature proposal* labels.
-Example workflow: when a UX designer provided a design but it needs frontend work they remove the UX label and add the frontend label.
-
-## Functional labels
-
-These labels describe what development specialities are involved such as: `CI`,
-`Core`, `Documentation`, `Frontend`, `Issues`, `Merge Requests`, `Omnibus`,
-`Release`, `Repository`, `UX`.
+What you can expect from them is described at https://about.gitlab.com/roles/merge-request-coach/.
 
 ## Assigning issues
 
 If an issue is complex and needs the attention of a specific person, assignment is a good option but assigning issues might discourage other people from contributing to that issue. We need all the contributions we can get so this should never be discouraged. Also, an assigned person might not have time for a few weeks, so others should feel free to takeover.
-
-## Label colors
-
-- Light orange `#fef2c0`: workflow labels for issue team members (awaiting
-  feedback, awaiting confirmation of fix)
-- Bright orange `#eb6420`: workflow labels for core team members (attached MR,
-  awaiting developer action/feedback)
-- Light blue `#82C5FF`: functional labels
-- Green labels `#009800`: issues that can generally be ignored. For example,
-  issues given the following labels normally can be closed immediately:
-  - Support (see copy & paste response:
-    [Support requests and configuration questions](#support-requests-and-configuration-questions)
 
 ## Be kind
 
 Be kind to people trying to contribute. Be aware that people may be a non-native
 English speaker, they might not understand things or they might be very
 sensitive as to how you word things. Use Emoji to express your feelings (heart,
-star, smile, etc.). Some good tips about giving feedback to merge requests is in
-the [Thoughtbot code review guide].
+star, smile, etc.). Some good tips about code reviews can be found in our
+[Code Review Guidelines].
+
+[Code Review Guidelines]: https://docs.gitlab.com/ce/development/code_review.html
+
+## Feature freeze on the 7th for the release on the 22nd
+
+After 7th at 23:59 (Pacific Time Zone) of each month, RC1 of the upcoming release (to be shipped on the 22nd) is created and deployed to GitLab.com and the stable branch for this release is frozen, which means master is no longer merged into it.
+Merge requests may still be merged into master during this period,
+but they will go into the _next_ release, unless they are manually cherry-picked into the stable branch.
+
+By freezing the stable branches 2 weeks prior to a release, we reduce the risk of a last minute merge request potentially breaking things.
+
+Any release candidate that gets created after this date can become a final release,
+hence the name release candidate.
+
+### Between the 1st and the 7th
+
+These types of merge requests for the upcoming release need special consideration:
+
+* **Large features**: a large feature is one that is highlighted in the kick-off
+  and the release blogpost; typically this will have its own channel in Slack
+  and a dedicated team with front-end, back-end, and UX.
+* **Small features**: any other feature request.
+
+It is strongly recommended that **large features** be with a maintainer **by the
+1st**. This means that:
+
+* There is a merge request (even if it's WIP).
+* The person (or people, if it needs a frontend and backend maintainer) who will
+  ultimately be responsible for merging this have been pinged on the MR.
+
+It's OK if merge request isn't completely done, but this allows the maintainer
+enough time to make the decision about whether this can make it in before the
+freeze. If the maintainer doesn't think it will make it, they should inform the
+developers working on it and the Product Manager responsible for the feature.
+
+The maintainer can also choose to assign a reviewer to perform an initial
+review, but this way the maintainer is unlikely to be surprised by receiving an
+MR later in the cycle.
+
+It is strongly recommended that **small features** be with a reviewer (not
+necessarily a maintainer) **by the 3rd**.
+
+Most merge requests from the community do not have a specific release
+target. However, if one does and falls into either of the above categories, it's
+the reviewer's responsibility to manage the above communication and assignment
+on behalf of the community member.
+
+#### What happens if these deadlines are missed?
+
+If a small or large feature is _not_ with a maintainer or reviewer by the
+recommended date, this does _not_ mean that maintainers or reviewers will refuse
+to review or merge it, or that the feature will definitely not make it in before
+the feature freeze.
+
+However, with every day that passes without review, it will become more likely
+that the feature will slip, because maintainers and reviewers may not have
+enough time to do a thorough review, and developers may not have enough time to
+adequately address any feedback that may come back.
+
+A maintainer or reviewer may also determine that it will not be possible to
+finish the current scope of the feature in time, but that it is possible to
+reduce the scope so that something can still ship this month, with the remaining
+scope moving to the next release. The sooner this decision is made, in
+conversation with the Product Manager and developer, the more time there is to
+extract that which is now out of scope, and to finish that which remains in scope.
+
+For these reasons, it is strongly recommended to follow the guidelines above,
+to maximize the chances of your feature making it in before the feature freeze,
+and to prevent any last minute surprises.
+
+### On the 7th
+
+Merge requests should still be complete, following the
+[definition of done][done]. The single exception is documentation, and this can
+only be left until after the freeze if:
+
+* There is a follow-up issue to add documentation.
+* It is assigned to the person writing documentation for this feature, and they
+  are aware of it.
+* It is in the correct milestone, with the ~Deliverable label.
+
+If a merge request is not ready, but the developers and Product Manager
+responsible for the feature think it is essential that it is in the release,
+they can [ask for an exception](#asking-for-an-exception) in advance. This is
+preferable to merging something that we are not confident in, but should still
+be a rare case: most features can be allowed to slip a release.
+
+All Community Edition merge requests from GitLab team members merged on the
+freeze date (the 7th) should have a corresponding Enterprise Edition merge
+request, even if there are no conflicts. This is to reduce the size of the
+subsequent EE merge, as we often merge a lot to CE on the release date. For more
+information, see
+[Automatic CE->EE merge][automatic_ce_ee_merge] and
+[Guidelines for implementing Enterprise Edition features][ee_features].
+
+### After the 7th
+
+Once the stable branch is frozen, the only MRs that can be cherry-picked into
+the stable branch are:
+
+* Fixes for [regressions](#regressions)
+* Fixes for security issues
+* Fixes or improvements to automated QA scenarios
+* Documentation updates for changes in the same release
+* New or updated translations (as long as they do not touch application code)
+
+During the feature freeze all merge requests that are meant to go into the
+upcoming release should have the correct milestone assigned _and_ the
+`Pick into X.Y` label where `X.Y` is equal to the milestone, so that release
+managers can find and pick them.
+Merge requests without this label will not be picked into the stable release.
+
+For example, if the upcoming release is `10.2.0` you will need to set the
+`Pick into 10.2` label.
+
+Fixes marked like this will be shipped in the next RC (before the 22nd), or the
+next patch release.
+
+If a merge request is to be picked into more than one release it will need one
+`Pick into X.Y` label per release where the merge request should be back-ported
+to. For example:
+
+- `Pick into 10.1`
+- `Pick into 10.0`
+- `Pick into 9.5`
+
+### Asking for an exception
+
+If you think a merge request should go into an RC or patch even though it does not meet these requirements,
+you can ask for an exception to be made.
+
+Check [this guide](https://gitlab.com/gitlab-org/release/docs/blob/master/general/exception-request/process.md) about how to open an exception request before opening one.
+
+## Regressions
+
+A regression for a particular monthly release is a bug that exists in that
+release, but wasn't present in the release before. This includes bugs in
+features that were only added in that monthly release. Every regression **must**
+have the milestone of the release it was introduced in - if a regression doesn't
+have a milestone, it might be 'just' a bug!
+
+For instance, if 10.5.0 adds a feature, and that feature doesn't work correctly,
+then this is a regression in 10.5. If 10.5.1 then fixes that, but 10.5.3 somehow
+reintroduces the bug, then this bug is still a regression in 10.5.
+
+Because GitLab.com runs release candidates of new releases, a regression can be
+reported in a release before its 'official' release date on the 22nd of the
+month. When we say 'the most recent monthly release', this can refer to either
+the version currently running on GitLab.com, or the most recent version
+available in the package repositories.
+
+### How to manage a regression
+
+Regressions are very important, and they should be considered high priority 
+issues that should be solved as soon as possible, especially if they affect
+users. Despite that, ~regression label itself does not imply when the issue
+will be scheduled.
+
+When a regression is found:
+1. Create an issue describing the problem in the most detailed way possible
+1. If possible, provide links to real examples and how to reproduce the problem
+1. Label the issue properly, using the [team label](../CONTRIBUTING.md#team-labels),
+   the [subject label](../CONTRIBUTING.md#subject-labels)
+   and any other label that may apply in the specific case
+1. Add the ~bug and ~regression labels
+1. Notify the respective Engineering Manager to evaluate the Severity of the regression and add a [Severity label](https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#bug-severity-labels). The counterpart Product Manager is included to weigh-in on prioritization as needed to set the [Priority label](https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#bug-priority-labels).
+1. If the regression is either an ~S1, ~S2 or ~S3 severity, label the regression with the current milestone as it should be fixed in the current milestone.
+  1. If the regression was introduced in an RC of the current release, label with ~Deliverable
+  1. If the regression was introduced in the previous release, label with ~"Next Patch Release"
+1. If the regression is an ~S4 severity, the regression may be scheduled for later milestones at the discretion of Engineering Manager and Product Manager.
+
+When a new issue is found, the fix should start as soon as possible. You can
+ping the Engineering Manager or the Product Manager for the relative area to
+make them aware of the issue earlier. They will analyze the priority and change
+it if needed.
+
+## Release retrospective and kickoff
+
+- [Retrospective](https://about.gitlab.com/handbook/engineering/workflow/#retrospective)
+- [Kickoff](https://about.gitlab.com/handbook/engineering/workflow/#kickoff)
 
 ## Copy & paste responses
 
 ### Improperly formatted issue
 
-Thanks for the issue report. Please reformat your issue to conform to the \[contributing guidelines\]\(https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#issue-tracker-guidelines).
+Thanks for the issue report. Please reformat your issue to conform to the [contributing guidelines](https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#issue-tracker-guidelines).
 
 ### Issue report for old version
 
-Thanks for the issue report but we only support issues for the latest stable version of GitLab. I'm closing this issue but if you still experience this problem in the latest stable version, please open a new issue (but also reference the old issue(s)). Make sure to also include the necessary debugging information conforming to the issue tracker guidelines found in our \[contributing guidelines\]\(https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#issue-tracker-guidelines).
+Thanks for the issue report but we only support issues for the latest stable version of GitLab. I'm closing this issue but if you still experience this problem in the latest stable version, please open a new issue (but also reference the old issue(s)). Make sure to also include the necessary debugging information conforming to the issue tracker guidelines found in our [contributing guidelines](https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#issue-tracker-guidelines).
 
 ### Support requests and configuration questions
 
 Thanks for your interest in GitLab. We don't use the issue tracker for support
 requests and configuration questions. Please check our
-\[getting help\]\(https://about.gitlab.com/getting-help/) page to see all of the available
-support options. Also, have a look at the \[contribution guidelines\]\(https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md)
+[getting help](https://about.gitlab.com/getting-help/) page to see all of the available
+support options. Also, have a look at the [contribution guidelines](https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md)
 for more information.
 
 ### Code format
 
-Please use ``` to format console output, logs, and code as it's very hard to read otherwise.
+Please use \`\`\` to format console output, logs, and code as it's very hard to read otherwise.
 
 ### Issue fixed in newer version
 
-Thanks for the issue report. This issue has already been fixed in newer versions of GitLab. Due to the size of this project and our limited resources we are only able to support the latest stable release as outlined in our \[contributing guidelines\]\(https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#issue-tracker). In order to get this bug fix and enjoy many new features please \[upgrade\]\(https://gitlab.com/gitlab-org/gitlab-ce/tree/master/doc/update). If you still experience issues at that time please open a new issue following our issue tracker guidelines found in the \[contributing guidelines\]\(https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#issue-tracker-guidelines).
+Thanks for the issue report. This issue has already been fixed in newer versions of GitLab. Due to the size of this project and our limited resources we are only able to support the latest stable release as outlined in our [contributing guidelines](https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#issue-tracker). In order to get this bug fix and enjoy many new features please [upgrade](https://gitlab.com/gitlab-org/gitlab-ce/tree/master/doc/update). If you still experience issues at that time please open a new issue following our issue tracker guidelines found in the [contributing guidelines](https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#issue-tracker-guidelines).
 
 ### Improperly formatted merge request
 
-Thanks for your interest in improving the GitLab codebase! Please update your merge request according to the \[contributing guidelines\]\(https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#pull-request-guidelines).
+Thanks for your interest in improving the GitLab codebase! Please update your merge request according to the [contributing guidelines](https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#pull-request-guidelines).
 
 ### Inactivity close of an issue
 
-It's been at least 2 weeks (and a new release) since we heard from you. I'm closing this issue but if you still experience this problem, please open a new issue (but also reference the old issue(s)). Make sure to also include the necessary debugging information conforming to the issue tracker guidelines found in our \[contributing guidelines\]\(https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#issue-tracker-guidelines).
+It's been at least 2 weeks (and a new release) since we heard from you. I'm closing this issue but if you still experience this problem, please open a new issue (but also reference the old issue(s)). Make sure to also include the necessary debugging information conforming to the issue tracker guidelines found in our [contributing guidelines](https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#issue-tracker-guidelines).
 
 ### Inactivity close of a merge request
 
-This merge request has been closed because a request for more information has not been reacted to for more than 2 weeks. If you respond and conform to the merge request guidelines in our \[contributing guidelines\]\(https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#pull-requests) we will reopen this merge request.
+This merge request has been closed because a request for more information has not been reacted to for more than 2 weeks. If you respond and conform to the merge request guidelines in our [contributing guidelines](https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#pull-requests) we will reopen this merge request.
 
 ### Accepting merge requests
 
 Is there an issue on the
-\[issue tracker\]\(https://gitlab.com/gitlab-org/gitlab-ce/issues) that is
+[issue tracker](https://gitlab.com/gitlab-org/gitlab-ce/issues) that is
 similar to this? Could you please link it here?
 Please be aware that new functionality that is not marked
-\[accepting merge requests\]\(https://gitlab.com/gitlab-org/gitlab-ce/issues?milestone_id=&scope=all&sort=created_desc&state=opened&utf8=%E2%9C%93&assignee_id=&author_id=&milestone_title=&label_name=Accepting+Merge+Requests)
+[accepting merge requests](https://gitlab.com/gitlab-org/gitlab-ce/issues?milestone_id=&scope=all&sort=created_desc&state=opened&utf8=%E2%9C%93&assignee_id=&author_id=&milestone_title=&label_name=Accepting+Merge+Requests)
 might not make it into GitLab.
 
 ### Only accepting merge requests with green tests
@@ -164,10 +308,12 @@ rebase with master to see if that solves the issue.
 We are currently in the process of closing down the issue tracker on GitHub, to
 prevent duplication with the GitLab.com issue tracker.
 Since this is an older issue I'll be closing this for now. If you think this is
-still an issue I encourage you to open it on the \[GitLab.com issue tracker\]\(https://gitlab.com/gitlab-org/gitlab-ce/issues).
+still an issue I encourage you to open it on the [GitLab.com issue tracker](https://gitlab.com/gitlab-org/gitlab-ce/issues).
 
-[core-team]: https://about.gitlab.com/core-team/
 [team]: https://about.gitlab.com/team/
 [contribution acceptance criteria]: https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#contribution-acceptance-criteria
 ["Implement design & UI elements" guidelines]: https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#implement-design-ui-elements
 [Thoughtbot code review guide]: https://github.com/thoughtbot/guides/tree/master/code-review
+[done]: https://gitlab.com/gitlab-org/gitlab-ce/blob/master/CONTRIBUTING.md#definition-of-done
+[automatic_ce_ee_merge]: https://docs.gitlab.com/ce/development/automatic_ce_ee_merge.html
+[ee_features]: https://docs.gitlab.com/ce/development/ee_features.html

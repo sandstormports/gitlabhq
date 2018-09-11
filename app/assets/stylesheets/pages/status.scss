@@ -1,58 +1,73 @@
-.container-fluid {
-  .ci-status {
-    padding: 2px 7px;
-    margin-right: 5px;
-    border: 1px solid #eee;
-    white-space: nowrap;
-    @include border-radius(4px);
+.ci-status {
+  padding: 2px 7px 4px;
+  border: 1px solid $gray-darker;
+  white-space: nowrap;
+  border-radius: 4px;
 
-    &:hover {
-      text-decoration: none;
-    }
+  &:hover,
+  &:focus {
+    text-decoration: none;
+  }
 
-    &.ci-failed {
-      color: $gl-danger;
-      border-color: $gl-danger;
-    }
+  svg {
+    height: 13px;
+    width: 13px;
+    position: relative;
+    top: 2px;
+    overflow: visible;
+  }
 
-    &.ci-success {
-      color: $gl-success;
-      border-color: $gl-success;
-    }
+  &.ci-failed {
+    @include status-color($red-100, $red-500, $red-600);
+  }
 
-    &.ci-info {
-      color: $gl-info;
-      border-color: $gl-info;
-    }
+  &.ci-success {
+    @include green-status-color;
+  }
 
-    &.ci-canceled,
-    &.ci-skipped,
-    &.ci-disabled {
-      color: $gl-gray;
-      border-color: $gl-gray;
-    }
+  &.ci-canceled,
+  &.ci-disabled,
+  &.ci-manual {
+    color: $gl-text-color;
+    border-color: $gl-text-color;
 
-    &.ci-pending,
-    &.ci-running {
-      color: $gl-warning;
-      border-color: $gl-warning;
+    &:not(span):hover {
+      background-color: rgba($gl-text-color, .07);
     }
   }
 
-  .ci-status-icon-success {
-    color: $gl-success;
+  &.ci-pending,
+  &.ci-failed_with_warnings,
+  &.ci-success_with_warnings {
+    @include status-color($orange-100, $orange-500, $orange-700);
   }
-  .ci-status-icon-failed {
-    color: $gl-danger;
+
+  &.ci-info,
+  &.ci-running {
+    @include status-color($blue-100, $blue-500, $blue-600);
   }
-  .ci-status-icon-running,
-  .ci-status-icon-pending {
-    color: $gl-warning;
+
+  &.ci-created,
+  &.ci-skipped {
+    color: $gl-text-color-secondary;
+    border-color: $gl-text-color-secondary;
+
+    &:not(span):hover {
+      background-color: rgba($gl-text-color-secondary, .07);
+    }
   }
-  .ci-status-icon-canceled,
-  .ci-status-icon-disabled,
-  .ci-status-icon-not-found,
-  .ci-status-icon-skipped {
-    color: $gl-gray;
+}
+
+.d-block.d-sm-none-inline {
+  .ci-status-link {
+    position: relative;
+    top: 2px;
+    left: 5px;
+  }
+}
+
+.ci-status-link {
+  svg {
+    overflow: visible;
   }
 }

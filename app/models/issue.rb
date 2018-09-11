@@ -1,81 +1,102 @@
-# == Schema Information
-#
-# Table name: issues
-#
-#  id            :integer          not null, primary key
-#  title         :string(255)
-#  assignee_id   :integer
-#  author_id     :integer
-#  project_id    :integer
-#  created_at    :datetime
-#  updated_at    :datetime
-#  position      :integer          default(0)
-#  branch_name   :string(255)
-#  description   :text
-#  milestone_id  :integer
-#  state         :string(255)
-#  iid           :integer
-#  updated_by_id :integer
-#  moved_to_id   :integer
-#
+# frozen_string_literal: true
 
 require 'carrierwave/orm/activerecord'
 
 class Issue < ActiveRecord::Base
-  include InternalId
+  include AtomicInternalId
+  include IidRoutes
   include Issuable
+  include Noteable
   include Referable
-  include Sortable
-  include Taskable
+  include Spammable
+  include FasterCacheKeys
+  include RelativePositioning
+  include TimeTrackable
+  include ThrottledTouch
+  include IgnorableColumn
+  include LabelEventable
 
-  DueDateStruct = Struct.new(:title, :name).freeze
-  NoDueDate     = DueDateStruct.new('No Due Date', '0').freeze
-  AnyDueDate    = DueDateStruct.new('Any Due Date', '').freeze
-  Overdue       = DueDateStruct.new('Overdue', 'overdue').freeze
-  DueThisWeek   = DueDateStruct.new('Due This Week', 'week').freeze
-  DueThisMonth  = DueDateStruct.new('Due This Month', 'month').freeze
+  ignore_column :assignee_id, :branch_name, :deleted_at
 
-  ActsAsTaggableOn.strict_case_match = true
+  DueDateStruct                   = Struct.new(:title, :name).freeze
+  NoDueDate                       = DueDateStruct.new('No Due Date', '0').freeze
+  AnyDueDate                      = DueDateStruct.new('Any Due Date', '').freeze
+  Overdue                         = DueDateStruct.new('Overdue', 'overdue').freeze
+  DueThisWeek                     = DueDateStruct.new('Due This Week', 'week').freeze
+  DueThisMonth                    = DueDateStruct.new('Due This Month', 'month').freeze
+  DueNextMonthAndPreviousTwoWeeks = DueDateStruct.new('Due Next Month And Previous Two Weeks', 'next_month_and_previous_two_weeks').freeze
 
   belongs_to :project
   belongs_to :moved_to, class_name: 'Issue'
+  belongs_to :closed_by, class_name: 'User'
+
+  has_internal_id :iid, scope: :project, init: ->(s) { s&.project&.issues&.maximum(:iid) }
+
+  has_many :events, as: :target, dependent: :destroy # rubocop:disable Cop/ActiveRecordDependent
+
+  has_many :merge_requests_closing_issues,
+    class_name: 'MergeRequestsClosingIssues',
+    dependent: :delete_all # rubocop:disable Cop/ActiveRecordDependent
+
+  has_many :issue_assignees
+  has_many :assignees, class_name: "User", through: :issue_assignees
 
   validates :project, presence: true
 
-  scope :cared, ->(user) { where(assignee_id: user) }
-  scope :open_for, ->(user) { opened.assigned_to(user) }
+  alias_attribute :parent_ids, :project_id
+
   scope :in_projects, ->(project_ids) { where(project_id: project_ids) }
 
+  scope :assigned, -> { where('EXISTS (SELECT TRUE FROM issue_assignees WHERE issue_id = issues.id)') }
+  scope :unassigned, -> { where('NOT EXISTS (SELECT TRUE FROM issue_assignees WHERE issue_id = issues.id)') }
+  scope :assigned_to, ->(u) { where('EXISTS (SELECT TRUE FROM issue_assignees WHERE user_id = ? AND issue_id = issues.id)', u.id)}
+
+  scope :with_due_date, -> { where.not(due_date: nil) }
   scope :without_due_date, -> { where(due_date: nil) }
   scope :due_before, ->(date) { where('issues.due_date < ?', date) }
   scope :due_between, ->(from_date, to_date) { where('issues.due_date >= ?', from_date).where('issues.due_date <= ?', to_date) }
+  scope :due_tomorrow, -> { where(due_date: Date.tomorrow) }
 
   scope :order_due_date_asc, -> { reorder('issues.due_date IS NULL, issues.due_date ASC') }
   scope :order_due_date_desc, -> { reorder('issues.due_date IS NULL, issues.due_date DESC') }
+  scope :order_closest_future_date, -> { reorder('CASE WHEN issues.due_date >= CURRENT_DATE THEN 0 ELSE 1 END ASC, ABS(CURRENT_DATE - issues.due_date) ASC') }
+
+  scope :preload_associations, -> { preload(:labels, project: :namespace) }
+
+  scope :public_only, -> { where(confidential: false) }
+
+  after_save :expire_etag_cache
+  after_save :ensure_metrics, unless: :imported?
+
+  attr_spammable :title, spam_title: true
+  attr_spammable :description, spam_description: true
+
+  participant :assignees
 
   state_machine :state, initial: :opened do
     event :close do
-      transition [:reopened, :opened] => :closed
+      transition [:opened] => :closed
     end
 
     event :reopen do
-      transition closed: :reopened
+      transition closed: :opened
     end
 
     state :opened
-    state :reopened
     state :closed
+
+    before_transition any => :closed do |issue|
+      issue.closed_at = Time.zone.now
+    end
+
+    before_transition closed: :opened do |issue|
+      issue.closed_at = nil
+      issue.closed_by = nil
+    end
   end
 
-  def hook_attrs
-    attributes
-  end
-
-  def self.visible_to_user(user)
-    return where(confidential: false) if user.blank?
-    return all if user.admin?
-
-    where("issues.confidential = 0 OR issues.confidential = 'f' OR (issues.confidential = 1 AND (issues.author_id = :user_id OR issues.assignee_id = :user_id OR issues.project_id IN(:project_ids)))", user_id: user.id, project_ids: user.authorized_projects.select(:id))
+  class << self
+    alias_method :in_parents, :in_projects
   end
 
   def self.reference_prefix
@@ -96,34 +117,78 @@ class Issue < ActiveRecord::Base
     @link_reference_pattern ||= super("issues", /(?<issue>\d+)/)
   end
 
-  def self.sort(method)
+  def self.reference_valid?(reference)
+    reference.to_i > 0 && reference.to_i <= Gitlab::Database::MAX_INT_VALUE
+  end
+
+  def self.project_foreign_key
+    'project_id'
+  end
+
+  def self.sort_by_attribute(method, excluded_labels: [])
     case method.to_s
-    when 'due_date_asc' then order_due_date_asc
-    when 'due_date_desc'  then order_due_date_desc
+    when 'closest_future_date' then order_closest_future_date
+    when 'due_date'      then order_due_date_asc
+    when 'due_date_asc'  then order_due_date_asc
+    when 'due_date_desc' then order_due_date_desc
     else
       super
     end
   end
 
-  def to_reference(from_project = nil)
+  def self.order_by_position_and_priority
+    order_labels_priority
+      .reorder(Gitlab::Database.nulls_last_order('relative_position', 'ASC'),
+              Gitlab::Database.nulls_last_order('highest_priority', 'ASC'),
+              "id DESC")
+  end
+
+  def hook_attrs
+    Gitlab::HookData::IssueBuilder.new(self).build
+  end
+
+  # Returns a Hash of attributes to be used for Twitter card metadata
+  def card_attributes
+    {
+      'Author'   => author.try(:name),
+      'Assignee' => assignee_list
+    }
+  end
+
+  def assignee_or_author?(user)
+    author_id == user.id || assignees.exists?(user.id)
+  end
+
+  def assignee_list
+    assignees.map(&:name).to_sentence
+  end
+
+  # `from` argument can be a Namespace or Project.
+  def to_reference(from = nil, full: false)
     reference = "#{self.class.reference_prefix}#{iid}"
 
-    if cross_project_reference?(from_project)
-      reference = project.to_reference + reference
-    end
-
-    reference
+    "#{project.to_reference(from, full: full)}#{reference}"
   end
 
   def referenced_merge_requests(current_user = nil)
-    @referenced_merge_requests ||= {}
-    @referenced_merge_requests[current_user] ||= begin
-      Gitlab::ReferenceExtractor.lazily do
-        [self, *notes].flat_map do |note|
-          note.all_references(current_user).merge_requests
-        end
-      end.sort_by(&:iid).uniq
+    ext = all_references(current_user)
+
+    notes_with_associations.each do |object|
+      object.all_references(current_user, extractor: ext)
     end
+
+    merge_requests = ext.merge_requests.sort_by(&:iid)
+
+    cross_project_filter = -> (merge_requests) do
+      merge_requests.select { |mr| mr.target_project == project }
+    end
+
+    Ability.merge_requests_readable_by_user(
+      merge_requests, current_user,
+      filters: {
+        read_cross_project: cross_project_filter
+      }
+    )
   end
 
   # All branches containing the current issue's ID, except for
@@ -138,16 +203,21 @@ class Issue < ActiveRecord::Base
     branches_with_iid - branches_with_merge_request
   end
 
-  # Reset issue events cache
-  #
-  # Since we do cache @event we need to reset cache in special cases:
-  # * when an issue is updated
-  # Events cache stored like  events/23-20130109142513.
-  # The cache key includes updated_at timestamp.
-  # Thus it will automatically generate a new fragment
-  # when the event is updated because the key changes.
-  def reset_events_cache
-    Event.reset_event_cache_for(self)
+  def suggested_branch_name
+    return to_branch_name unless project.repository.branch_exists?(to_branch_name)
+
+    start_counting_from = 2
+    Uniquify.new(start_counting_from).string(-> (counter) { "#{to_branch_name}-#{counter}" }) do |suggested_branch_name|
+      project.repository.branch_exists?(suggested_branch_name)
+    end
+  end
+
+  # Returns boolean if a related branch exists for the current issue
+  # ignores merge requests branchs
+  def has_related_branch?
+    project.repository.branch_names.any? do |branch|
+      /\A#{iid}-(?!\d+-stable)/i =~ branch
+    end
   end
 
   # To allow polymorphism with MergeRequest.
@@ -160,9 +230,19 @@ class Issue < ActiveRecord::Base
   def closed_by_merge_requests(current_user = nil)
     return [] unless open?
 
-    notes.system.flat_map do |note|
-      note.all_references(current_user).merge_requests
-    end.uniq.select { |mr| mr.open? && mr.closes_issue?(self) }
+    ext = all_references(current_user)
+
+    notes.system.each do |note|
+      note.all_references(current_user, extractor: ext)
+    end
+
+    merge_requests = ext.merge_requests.select(&:open?)
+    if merge_requests.any?
+      ids = MergeRequestsClosingIssues.where(merge_request_id: merge_requests.map(&:id), issue_id: id).pluck(:merge_request_id)
+      merge_requests.select { |mr| mr.id.in?(ids) }
+    else
+      []
+    end
   end
 
   def moved?
@@ -186,14 +266,94 @@ class Issue < ActiveRecord::Base
     end
   end
 
-  def can_be_worked_on?(current_user)
-    !self.closed? &&
-      !self.project.forked? &&
-      self.related_branches(current_user).empty? &&
-      self.closed_by_merge_requests(current_user).empty?
+  def can_be_worked_on?
+    !self.closed? && !self.project.forked?
   end
 
-  def overdue?
-    due_date.try(:past?) || false
+  # Returns `true` if the current issue can be viewed by either a logged in User
+  # or an anonymous user.
+  def visible_to_user?(user = nil)
+    return false unless project && project.feature_available?(:issues, user)
+
+    user ? readable_by?(user) : publicly_visible?
+  end
+
+  def check_for_spam?
+    project.public? && (title_changed? || description_changed?)
+  end
+
+  def as_json(options = {})
+    super(options).tap do |json|
+      if options.key?(:issue_endpoints) && project
+        url_helper = Gitlab::Routing.url_helpers
+
+        issue_reference = options[:include_full_project_path] ? to_reference(full: true) : to_reference
+
+        json.merge!(
+          reference_path: issue_reference,
+          real_path: url_helper.project_issue_path(project, self),
+          issue_sidebar_endpoint: url_helper.project_issue_path(project, self, format: :json, serializer: 'sidebar'),
+          toggle_subscription_endpoint: url_helper.toggle_subscription_project_issue_path(project, self)
+        )
+      end
+
+      if options.key?(:labels)
+        json[:labels] = labels.as_json(
+          project: project,
+          only: [:id, :title, :description, :color, :priority],
+          methods: [:text_color]
+        )
+      end
+    end
+  end
+
+  def etag_caching_enabled?
+    true
+  end
+
+  def discussions_rendered_on_frontend?
+    true
+  end
+
+  def update_project_counter_caches
+    Projects::OpenIssuesCountService.new(project).refresh_cache
+  end
+
+  private
+
+  def ensure_metrics
+    super
+    metrics.record!
+  end
+
+  # Returns `true` if the given User can read the current Issue.
+  #
+  # This method duplicates the same check of issue_policy.rb
+  # for performance reasons, check commit: 002ad215818450d2cbbc5fa065850a953dc7ada8
+  # Make sure to sync this method with issue_policy.rb
+  def readable_by?(user)
+    if user.admin?
+      true
+    elsif project.owner == user
+      true
+    elsif confidential?
+      author == user ||
+        assignees.include?(user) ||
+        project.team.member?(user, Gitlab::Access::REPORTER)
+    else
+      project.public? ||
+        project.internal? && !user.external? ||
+        project.team.member?(user)
+    end
+  end
+
+  # Returns `true` if this Issue is visible to everybody.
+  def publicly_visible?
+    project.public? && !confidential?
+  end
+
+  def expire_etag_cache
+    key = Gitlab::Routing.url_helpers.realtime_changes_project_issue_path(project, self)
+    Gitlab::EtagCaching::Store.new.touch(key)
   end
 end

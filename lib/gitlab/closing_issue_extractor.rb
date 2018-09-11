@@ -1,7 +1,7 @@
 module Gitlab
   class ClosingIssueExtractor
     ISSUE_CLOSING_REGEX = begin
-      link_pattern = URI.regexp(%w(http https))
+      link_pattern = Banzai::Filter::AutolinkFilter::LINK_PATTERN
 
       pattern = Gitlab.config.gitlab.issue_closing_pattern
       pattern = pattern.sub('%{issue_ref}', "(?:(?:#{link_pattern})|(?:#{Issue.reference_pattern}))")
@@ -22,7 +22,10 @@ module Gitlab
 
       @extractor.analyze(closing_statements.join(" "))
 
-      @extractor.issues
+      @extractor.issues.reject do |issue|
+        # Don't extract issues from the project this project was forked from
+        @extractor.project.forked_from?(issue.project)
+      end
     end
   end
 end

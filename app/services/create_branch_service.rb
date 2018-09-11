@@ -1,51 +1,38 @@
-require_relative 'base_service'
+# frozen_string_literal: true
 
 class CreateBranchService < BaseService
-  def execute(branch_name, ref, source_project: @project)
-    valid_branch = Gitlab::GitRefValidator.validate(branch_name)
-    if valid_branch == false
-      return error('Branch name is invalid')
-    end
+  def execute(branch_name, ref)
+    create_master_branch if project.empty_repo?
 
-    repository = project.repository
-    existing_branch = repository.find_branch(branch_name)
-    if existing_branch
-      return error('Branch already exists')
-    end
+    result = ValidateNewBranchService.new(project, current_user)
+      .execute(branch_name)
 
-    new_branch = nil
-    if source_project != @project
-      repository.with_tmp_ref do |tmp_ref|
-        repository.fetch_ref(
-          source_project.repository.path_to_repo,
-          "refs/heads/#{ref}",
-          tmp_ref
-        )
+    return result if result[:status] == :error
 
-        new_branch = repository.add_branch(current_user, branch_name, tmp_ref)
-      end
-    else
-      new_branch = repository.add_branch(current_user, branch_name, ref)
-    end
+    new_branch = repository.add_branch(current_user, branch_name, ref)
 
     if new_branch
-      # GitPushService handles execution of services and hooks for branch pushes
       success(new_branch)
     else
       error('Invalid reference name')
     end
-  rescue GitHooksService::PreReceiveError
-    error('Branch creation was rejected by Git hook')
+  rescue Gitlab::Git::PreReceiveError => ex
+    error(ex.message)
   end
 
   def success(branch)
-    out = super()
-    out[:branch] = branch
-    out
+    super().merge(branch: branch)
   end
 
-  def build_push_data(project, user, branch)
-    Gitlab::PushDataBuilder.
-      build(project, user, Gitlab::Git::BLANK_SHA, branch.target, "#{Gitlab::Git::BRANCH_REF_PREFIX}#{branch.name}", [])
+  private
+
+  def create_master_branch
+    project.repository.create_file(
+      current_user,
+      '/README.md',
+      '',
+      message: 'Add README.md',
+      branch_name: 'master'
+    )
   end
 end

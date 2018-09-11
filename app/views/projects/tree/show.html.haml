@@ -1,17 +1,14 @@
-- page_title @path.presence || "Files", @ref
-- header_title project_title(@project, "Files", project_files_path(@project))
+- @no_container = true
+- breadcrumb_title _("Repository")
+- @content_class = "limit-container-width" unless fluid_layout
+- signatures_path = namespace_project_signatures_path(namespace_id: @project.namespace.full_path, project_id: @project.path, id: @last_commit)
+
+- page_title @path.presence || _("Files"), @ref
 = content_for :meta_tags do
-  - if current_user
-    = auto_discovery_link_tag(:atom, namespace_project_commits_url(@project.namespace, @project, @ref, format: :atom, private_token: current_user.private_token), title: "#{@project.name}:#{@ref} commits")
-= render 'projects/last_push'
+  = auto_discovery_link_tag(:atom, project_commits_url(@project, @ref, rss_url_options), title: "#{@project.name}:#{@ref} commits")
 
-.tree-controls
-  = render 'projects/find_file_link'
-  - if can? current_user, :download_code, @project
-    = render 'projects/repositories/download_archive', ref: @ref, btn_class: 'hidden-xs hidden-sm btn-grouped', split_button: true
+.js-signature-container{ data: { 'signatures-path': signatures_path } }
 
-#tree-holder.tree-holder.clearfix
-  .nav-block
-    = render 'projects/tree/tree_header', tree: @tree
-
-  = render 'projects/tree/tree_content', tree: @tree
+%div{ class: [(container_class), ("limit-container-width" unless fluid_layout)] }
+  = render 'projects/last_push'
+  = render 'projects/files', commit: @last_commit, project: @project, ref: @ref, content_url: project_tree_path(@project, @id)

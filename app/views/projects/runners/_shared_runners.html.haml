@@ -1,26 +1,25 @@
-%h3 Shared runners
+%h3
+  = _('Shared Runners')
 
-.bs-callout.bs-callout-warning.shared-runners-description
-  - if shared_runners_text.present?
-    = markdown(shared_runners_text, pipeline: 'plain_markdown')
+.bs-callout.shared-runners-description
+  - if Gitlab::CurrentSettings.shared_runners_text.present?
+    = markdown_field(Gitlab::CurrentSettings.current_application_settings, :shared_runners_text)
   - else
-    Shared runners execute code of different projects on the same Runner unless you configure GitLab Runner Autoscale with MaxBuilds 1 (which it is on GitLab.com).
+    GitLab Shared Runners execute code of different projects on the same Runner
+    unless you configure GitLab Runner Autoscale with MaxBuilds 1 (which it is
+    on GitLab.com).
   %hr
   - if @project.shared_runners_enabled?
-    = link_to toggle_shared_runners_namespace_project_runners_path(@project.namespace, @project), class: 'btn btn-warning', method: :post do
-      Disable shared runners
+    = link_to toggle_shared_runners_project_runners_path(@project), class: 'btn btn-close', method: :post do
+      Disable shared Runners
   - else
-    = link_to toggle_shared_runners_namespace_project_runners_path(@project.namespace, @project), class: 'btn btn-success', method: :post do
-      Enable shared runners
+    = link_to toggle_shared_runners_project_runners_path(@project), class: 'btn btn-success', method: :post do
+      Enable shared Runners
   &nbsp; for this project
 
 - if @shared_runners_count.zero?
-  This GitLab server does not provide any shared runners yet.
-  Please use specific runners or ask the administrator to create one.
+  = _('This GitLab instance does not provide any shared Runners yet. Instance administrators can register shared Runners in the admin area.')
 - else
-  %h4.underlined-title Available shared runners - #{@shared_runners_count}
+  %h4.underlined-title Available shared Runners : #{@shared_runners_count}
   %ul.bordered-list.available-shared-runners
-    = render partial: 'runner', collection: @shared_runners, as: :runner
-  - if @shared_runners_count > 10
-    .light
-      and #{@shared_runners_count - 10} more...
+    = render partial: 'projects/runners/runner', collection: @shared_runners, as: :runner

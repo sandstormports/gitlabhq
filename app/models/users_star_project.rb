@@ -1,13 +1,4 @@
-# == Schema Information
-#
-# Table name: users_star_projects
-#
-#  id         :integer          not null, primary key
-#  project_id :integer          not null
-#  user_id    :integer          not null
-#  created_at :datetime
-#  updated_at :datetime
-#
+# frozen_string_literal: true
 
 class UsersStarProject < ActiveRecord::Base
   belongs_to :project, counter_cache: :star_count, touch: true

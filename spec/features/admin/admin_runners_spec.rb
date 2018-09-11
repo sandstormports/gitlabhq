@@ -1,43 +1,113 @@
 require 'spec_helper'
 
 describe "Admin Runners" do
+  include StubENV
+
   before do
-    login_as :admin
+    stub_env('IN_MEMORY_APPLICATION_SETTINGS', 'false')
+    sign_in(create(:admin))
   end
 
   describe "Runners page" do
-    before do
-      runner = FactoryGirl.create(:ci_runner)
-      commit = FactoryGirl.create(:ci_commit)
-      FactoryGirl.create(:ci_build, commit: commit, runner_id: runner.id)
-      visit admin_runners_path
-    end
+    let(:pipeline) { create(:ci_pipeline) }
 
-    it { page.has_text? "Manage Runners" }
-    it { page.has_text? "To register a new runner" }
-    it { page.has_text? "Runners with last contact less than a minute ago: 1" }
-
-    describe 'search' do
+    context "when there are runners" do
       before do
-        FactoryGirl.create :ci_runner, description: 'runner-foo'
-        FactoryGirl.create :ci_runner, description: 'runner-bar'
-
-        search_form = find('#runners-search')
-        search_form.fill_in 'search', with: 'runner-foo'
-        search_form.click_button 'Search'
+        runner = FactoryBot.create(:ci_runner, contacted_at: Time.now)
+        FactoryBot.create(:ci_build, pipeline: pipeline, runner_id: runner.id)
+        visit admin_runners_path
       end
 
-      it { expect(page).to have_content("runner-foo") }
-      it { expect(page).not_to have_content("runner-bar") }
+      it 'has all necessary texts' do
+        expect(page).to have_text "Setup a shared Runner manually"
+        expect(page).to have_text "Runners with last contact more than a minute ago: 1"
+      end
+
+      describe 'search' do
+        before do
+          FactoryBot.create :ci_runner, description: 'runner-foo'
+          FactoryBot.create :ci_runner, description: 'runner-bar'
+        end
+
+        it 'shows correct runner when description matches' do
+          search_form = find('#runners-search')
+          search_form.fill_in 'search', with: 'runner-foo'
+          search_form.click_button 'Search'
+
+          expect(page).to have_content("runner-foo")
+          expect(page).not_to have_content("runner-bar")
+        end
+
+        it 'shows no runner when description does not match' do
+          search_form = find('#runners-search')
+          search_form.fill_in 'search', with: 'runner-baz'
+          search_form.click_button 'Search'
+
+          expect(page).to have_text 'No runners found'
+        end
+      end
+    end
+
+    context "when there are no runners" do
+      before do
+        visit admin_runners_path
+      end
+
+      it 'has all necessary texts including no runner message' do
+        expect(page).to have_text "Setup a shared Runner manually"
+        expect(page).to have_text "Runners with last contact more than a minute ago: 0"
+        expect(page).to have_text 'No runners found'
+      end
+    end
+
+    context 'group runner' do
+      let(:group) { create(:group) }
+      let!(:runner) { create(:ci_runner, :group, groups: [group]) }
+
+      it 'shows the label and does not show the project count' do
+        visit admin_runners_path
+
+        within "#runner_#{runner.id}" do
+          expect(page).to have_selector '.badge', text: 'group'
+          expect(page).to have_text 'n/a'
+        end
+      end
+    end
+
+    context 'shared runner' do
+      it 'shows the label and does not show the project count' do
+        runner = create :ci_runner, :instance
+
+        visit admin_runners_path
+
+        within "#runner_#{runner.id}" do
+          expect(page).to have_selector '.badge', text: 'shared'
+          expect(page).to have_text 'n/a'
+        end
+      end
+    end
+
+    context 'specific runner' do
+      it 'shows the label and the project count' do
+        project = create :project
+        runner = create :ci_runner, :project, projects: [project]
+
+        visit admin_runners_path
+
+        within "#runner_#{runner.id}" do
+          expect(page).to have_selector '.badge', text: 'specific'
+          expect(page).to have_text '1'
+        end
+      end
     end
   end
 
   describe "Runner show page" do
-    let(:runner) { FactoryGirl.create :ci_runner }
+    let(:runner) { FactoryBot.create :ci_runner }
 
     before do
-      @project1 = FactoryGirl.create(:empty_project)
-      @project2 = FactoryGirl.create(:empty_project)
+      @project1 = FactoryBot.create(:project)
+      @project2 = FactoryBot.create(:project)
       visit admin_runner_path(runner)
     end
 
@@ -46,8 +116,10 @@ describe "Admin Runners" do
     end
 
     describe 'projects' do
-      it { expect(page).to have_content(@project1.name_with_namespace) }
-      it { expect(page).to have_content(@project2.name_with_namespace) }
+      it 'contains project names' do
+        expect(page).to have_content(@project1.full_name)
+        expect(page).to have_content(@project2.full_name)
+      end
     end
 
     describe 'search' do
@@ -57,29 +129,96 @@ describe "Admin Runners" do
         search_form.click_button 'Search'
       end
 
-      it { expect(page).to have_content(@project1.name_with_namespace) }
-      it { expect(page).not_to have_content(@project2.name_with_namespace) }
+      it 'contains name of correct project' do
+        expect(page).to have_content(@project1.full_name)
+        expect(page).not_to have_content(@project2.full_name)
+      end
+    end
+
+    describe 'enable/create' do
+      shared_examples 'assignable runner' do
+        it 'enables a runner for a project' do
+          within '.unassigned-projects' do
+            click_on 'Enable'
+          end
+
+          assigned_project = page.find('.assigned-projects')
+
+          expect(assigned_project).to have_content(@project2.path)
+        end
+      end
+
+      context 'with specific runner' do
+        let(:runner) { create(:ci_runner, :project, projects: [@project1]) }
+
+        before do
+          visit admin_runner_path(runner)
+        end
+
+        it_behaves_like 'assignable runner'
+      end
+
+      context 'with locked runner' do
+        let(:runner) { create(:ci_runner, :project, projects: [@project1], locked: true) }
+
+        before do
+          visit admin_runner_path(runner)
+        end
+
+        it_behaves_like 'assignable runner'
+      end
+
+      context 'with shared runner' do
+        let(:runner) { create(:ci_runner, :instance) }
+
+        before do
+          @project1.destroy
+          visit admin_runner_path(runner)
+        end
+
+        it_behaves_like 'assignable runner'
+      end
+    end
+
+    describe 'disable/destroy' do
+      let(:runner) { create(:ci_runner, :project, projects: [@project1]) }
+
+      before do
+        visit admin_runner_path(runner)
+      end
+
+      it 'enables specific runner for project' do
+        within '.assigned-projects' do
+          click_on 'Disable'
+        end
+
+        new_runner_project = page.find('.unassigned-projects')
+
+        expect(new_runner_project).to have_content(@project1.path)
+      end
     end
   end
 
   describe 'runners registration token' do
-    let!(:token) { current_application_settings.runners_registration_token }
-    before { visit admin_runners_path }
+    let!(:token) { Gitlab::CurrentSettings.runners_registration_token }
+
+    before do
+      visit admin_runners_path
+    end
 
     it 'has a registration token' do
-      expect(page).to have_content("Registration token is #{token}")
-      expect(page).to have_selector('#runners-token', text: token)
+      expect(page.find('#registration_token')).to have_content(token)
     end
 
     describe 'reload registration token' do
-      let(:page_token) { find('#runners-token').text }
+      let(:page_token) { find('#registration_token').text }
 
       before do
         click_button 'Reset runners registration token'
       end
 
       it 'changes registration token' do
-        expect(page_token).to_not eq token
+        expect(page_token).not_to eq token
       end
     end
   end

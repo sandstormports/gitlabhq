@@ -1,8 +1,5 @@
 class FixIdentities < ActiveRecord::Migration
   def up
-    # Sandstorm port omits ldap features. Nothing to do here.
-    return
-
     # Up until now, legacy 'ldap' references in the database were charitably
     # interpreted to point to the first LDAP server specified in the GitLab
     # configuration. So if the database said 'provider: ldap' but the first

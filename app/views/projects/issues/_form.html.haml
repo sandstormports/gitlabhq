@@ -1,8 +1,4 @@
-= form_for [@project.namespace.becomes(Namespace), @project, @issue], html: { class: 'form-horizontal issue-form common-note-form js-quick-submit js-requires-input' } do |f|
+= form_for [@project.namespace.becomes(Namespace), @project, @issue],
+           html: { class: 'issue-form common-note-form js-quick-submit js-requires-input' },
+           data: { markdown_version: @issue.cached_markdown_version } do |f|
   = render 'shared/issuable/form', f: f, issuable: @issue
-
-:javascript
-  $('.assign-to-me-link').on('click', function(e){
-    $('#issue_assignee_id').val("#{current_user.id}").trigger("change");
-    e.preventDefault();
-  });

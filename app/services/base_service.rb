@@ -1,18 +1,12 @@
+# frozen_string_literal: true
+
 class BaseService
-  include Gitlab::CurrentSettings
+  include Gitlab::Allowable
 
   attr_accessor :project, :current_user, :params
 
-  def initialize(project, user, params = {})
+  def initialize(project, user = nil, params = {})
     @project, @current_user, @params = project, user, params.dup
-  end
-
-  def abilities
-    Ability.abilities
-  end
-
-  def can?(object, action, subject)
-    abilities.allowed?(object, action, subject)
   end
 
   def notification_service
@@ -31,13 +25,15 @@ class BaseService
     Gitlab::AppLogger.info message
   end
 
+  def log_error(message)
+    Gitlab::AppLogger.error message
+  end
+
   def system_hook_service
     SystemHooksService.new
   end
 
-  def repository
-    project.repository
-  end
+  delegate :repository, to: :project
 
   # Add an error to the specified model for restricted visibility levels
   def deny_visibility_level(model, denied_visibility_level = nil)
@@ -60,9 +56,8 @@ class BaseService
     result
   end
 
-  def success
-    {
-      status: :success
-    }
+  def success(pass_back = {})
+    pass_back[:status] = :success
+    pass_back
   end
 end

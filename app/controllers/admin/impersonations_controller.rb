@@ -7,9 +7,11 @@ class Admin::ImpersonationsController < Admin::ApplicationController
 
     warden.set_user(impersonator, scope: :user)
 
+    Gitlab::AppLogger.info("User #{impersonator.username} has stopped impersonating #{original_user.username}")
+
     session[:impersonator_id] = nil
 
-    redirect_to admin_user_path(original_user)
+    redirect_to admin_user_path(original_user), status: :found
   end
 
   private
@@ -19,6 +21,6 @@ class Admin::ImpersonationsController < Admin::ApplicationController
   end
 
   def authenticate_impersonator!
-    render_404 unless impersonator && impersonator.is_admin? && !impersonator.blocked?
+    render_404 unless impersonator && impersonator.admin? && !impersonator.blocked?
   end
 end

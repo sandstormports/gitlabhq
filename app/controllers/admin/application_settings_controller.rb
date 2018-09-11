@@ -5,7 +5,11 @@ class Admin::ApplicationSettingsController < Admin::ApplicationController
   end
 
   def update
-    if @application_setting.update_attributes(application_setting_params)
+    successful = ApplicationSettings::UpdateService
+      .new(@application_setting, current_user, application_setting_params)
+      .execute
+
+    if successful
       redirect_to admin_application_settings_path,
         notice: 'Application settings saved successfully'
     else
@@ -13,10 +17,27 @@ class Admin::ApplicationSettingsController < Admin::ApplicationController
     end
   end
 
+  def usage_data
+    respond_to do |format|
+      format.html do
+        usage_data_json = JSON.pretty_generate(Gitlab::UsageData.data)
+
+        render html: Gitlab::Highlight.highlight('payload.json', usage_data_json)
+      end
+      format.json { render json: Gitlab::UsageData.to_json }
+    end
+  end
+
   def reset_runners_token
     @application_setting.reset_runners_registration_token!
     flash[:notice] = 'New runners registration token has been generated!'
     redirect_to admin_runners_path
+  end
+
+  def reset_health_check_token
+    @application_setting.reset_health_check_access_token!
+    flash[:notice] = 'New health check access token has been generated!'
+    redirect_to :back
   end
 
   def clear_repository_check_states
@@ -31,71 +52,38 @@ class Admin::ApplicationSettingsController < Admin::ApplicationController
   private
 
   def set_application_setting
-    @application_setting = ApplicationSetting.current
+    @application_setting = Gitlab::CurrentSettings.current_application_settings
   end
 
   def application_setting_params
-    restricted_levels = params[:application_setting][:restricted_visibility_levels]
-    if restricted_levels.nil?
-      params[:application_setting][:restricted_visibility_levels] = []
-    else
-      restricted_levels.map! do |level|
-        level.to_i
-      end
+    params[:application_setting] ||= {}
+
+    if params[:application_setting].key?(:enabled_oauth_sign_in_sources)
+      enabled_oauth_sign_in_sources = params[:application_setting].delete(:enabled_oauth_sign_in_sources)
+      enabled_oauth_sign_in_sources&.delete("")
+
+      params[:application_setting][:disabled_oauth_sign_in_sources] =
+        AuthHelper.button_based_providers.map(&:to_s) -
+        Array(enabled_oauth_sign_in_sources)
     end
 
-    import_sources = params[:application_setting][:import_sources]
-    if import_sources.nil?
-      params[:application_setting][:import_sources] = []
-    else
-      import_sources.map! do |source|
-        source.to_str
-      end
-    end
+    params[:application_setting][:import_sources]&.delete("")
+    params[:application_setting][:restricted_visibility_levels]&.delete("")
+    params.delete(:domain_blacklist_raw) if params[:domain_blacklist_file]
 
     params.require(:application_setting).permit(
-      :default_projects_limit,
-      :default_branch_protection,
-      :signup_enabled,
-      :signin_enabled,
-      :require_two_factor_authentication,
-      :two_factor_grace_period,
-      :gravatar_enabled,
-      :sign_in_text,
-      :help_page_text,
-      :home_page_url,
-      :after_sign_out_path,
-      :max_attachment_size,
-      :session_expire_delay,
-      :default_project_visibility,
-      :default_snippet_visibility,
-      :default_group_visibility,
-      :restricted_signup_domains_raw,
-      :version_check_enabled,
-      :admin_notification_email,
-      :user_oauth_applications,
-      :shared_runners_enabled,
-      :shared_runners_text,
-      :max_artifacts_size,
-      :metrics_enabled,
-      :metrics_host,
-      :metrics_port,
-      :metrics_pool_size,
-      :metrics_timeout,
-      :metrics_method_call_threshold,
-      :metrics_sample_interval,
-      :recaptcha_enabled,
-      :recaptcha_site_key,
-      :recaptcha_private_key,
-      :sentry_enabled,
-      :sentry_dsn,
-      :akismet_enabled,
-      :akismet_api_key,
-      :email_author_in_body,
-      :repository_checks_enabled,
-      :metrics_packet_size,
-      restricted_visibility_levels: [],
-      import_sources: []
+      visible_application_setting_attributes
     )
+  end
+
+  def visible_application_setting_attributes
+    ApplicationSettingsHelper.visible_attributes + [
+      :domain_blacklist_file,
+      disabled_oauth_sign_in_sources: [],
+      import_sources: [],
+      repository_storages: [],
+      restricted_visibility_levels: [],
+      sidekiq_throttling_queues: []
+    ]
   end
 end

@@ -4,8 +4,12 @@ module PageLayoutHelper
 
     @page_title.push(*titles.compact) if titles.any?
 
+    if titles.any? && !defined?(@breadcrumb_title)
+      @breadcrumb_title = @page_title.last
+    end
+
     # Segments are seperated by middot
-    @page_title.join(" \u00b7 ")
+    @page_title.join(" · ")
   end
 
   # Define or get a description for the current page
@@ -34,6 +38,10 @@ module PageLayoutHelper
     end
   end
 
+  def favicon
+    Gitlab::Favicon.main
+  end
+
   def page_image
     default = image_url('gitlab_logo.png')
 
@@ -52,7 +60,7 @@ module PageLayoutHelper
     raise ArgumentError, 'cannot provide more than two attributes' if map.length > 2
 
     @page_card_attributes ||= {}
-    @page_card_attributes = map.reject { |_,v| v.blank? } if map.present?
+    @page_card_attributes = map.reject { |_, v| v.blank? } if map.present?
     @page_card_attributes
   end
 
@@ -72,7 +80,9 @@ module PageLayoutHelper
       @header_title     = title
       @header_title_url = title_url
     else
-      @header_title_url ? link_to(@header_title, @header_title_url) : @header_title
+      return @header_title unless @header_title_url
+
+      breadcrumb_list_item(link_to(@header_title, @header_title_url))
     end
   end
 
@@ -84,12 +94,16 @@ module PageLayoutHelper
     end
   end
 
-  def fluid_layout(enabled = false)
-    if @fluid_layout.nil?
-      @fluid_layout = (current_user && current_user.layout == "fluid") || enabled
+  def nav(name = nil)
+    if name
+      @nav = name
     else
-      @fluid_layout
+      @nav
     end
+  end
+
+  def fluid_layout
+    current_user && current_user.layout == "fluid"
   end
 
   def blank_container(enabled = false)

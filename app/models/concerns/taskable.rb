@@ -9,13 +9,13 @@ require 'task_list/filter'
 module Taskable
   COMPLETED    = 'completed'.freeze
   INCOMPLETE   = 'incomplete'.freeze
-  ITEM_PATTERN = /
+  ITEM_PATTERN = %r{
     ^
-    (?:\s*[-+*]|(?:\d+\.))? # optional list prefix
-    \s*                     # optional whitespace prefix
-    (\[\s\]|\[[xX]\])       # checkbox
-    (\s.+)                  # followed by whitespace and some text.
-  /x
+    \s*(?:[-+*]|(?:\d+\.)) # list prefix required - task item has to be always in a list
+    \s+                       # whitespace prefix has to be always presented for a list item
+    (\[\s\]|\[[xX]\])         # checkbox
+    (\s.+)                    # followed by whitespace and some text.
+  }x
 
   def self.get_tasks(content)
     content.to_s.scan(ITEM_PATTERN).map do |checkbox, label|
@@ -39,7 +39,7 @@ module Taskable
   def task_list_items
     return [] if description.blank?
 
-    @task_list_items ||= Taskable.get_tasks(description)
+    @task_list_items ||= Taskable.get_tasks(description) # rubocop:disable Gitlab/ModuleWithInstanceVariables
   end
 
   def tasks
@@ -52,11 +52,23 @@ module Taskable
   end
 
   # Return a string that describes the current state of this Taskable's task
-  # list items, e.g. "20 tasks (12 completed, 8 remaining)"
-  def task_status
+  # list items, e.g. "12 of 20 tasks completed"
+  def task_status(short: false)
     return '' if description.blank?
 
+    prep, completed = if short
+                        ['/', '']
+                      else
+                        [' of ', ' completed']
+                      end
+
     sum = tasks.summary
-    "#{sum.item_count} tasks (#{sum.complete_count} completed, #{sum.incomplete_count} remaining)"
+    "#{sum.complete_count}#{prep}#{sum.item_count} #{'task'.pluralize(sum.item_count)}#{completed}"
+  end
+
+  # Return a short string that describes the current state of this Taskable's
+  # task list items -- for small screens
+  def task_status_short
+    task_status(short: true)
   end
 end

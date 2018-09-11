@@ -1,13 +1,4 @@
-# == Schema Information
-#
-# Table name: lfs_objects_projects
-#
-#  id            :integer          not null, primary key
-#  lfs_object_id :integer          not null
-#  project_id    :integer          not null
-#  created_at    :datetime
-#  updated_at    :datetime
-#
+# frozen_string_literal: true
 
 class LfsObjectsProject < ActiveRecord::Base
   belongs_to :project
@@ -16,4 +7,12 @@ class LfsObjectsProject < ActiveRecord::Base
   validates :lfs_object_id, presence: true
   validates :lfs_object_id, uniqueness: { scope: [:project_id], message: "already exists in project" }
   validates :project_id, presence: true
+
+  after_commit :update_project_statistics, on: [:create, :destroy]
+
+  private
+
+  def update_project_statistics
+    ProjectCacheWorker.perform_async(project_id, [], [:lfs_objects_size])
+  end
 end

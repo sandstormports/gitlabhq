@@ -6,9 +6,9 @@ class Projects::RunnerProjectsController < Projects::ApplicationController
   def create
     @runner = Ci::Runner.find(params[:runner_project][:runner_id])
 
-    return head(403) unless current_user.ci_authorized_runners.include?(@runner)
+    return head(403) unless can?(current_user, :assign_runner, @runner)
 
-    path = runners_path(project)
+    path = project_runners_path(project)
 
     if @runner.assign_to(project, current_user)
       redirect_to path
@@ -21,6 +21,6 @@ class Projects::RunnerProjectsController < Projects::ApplicationController
     runner_project = project.runner_projects.find(params[:id])
     runner_project.destroy
 
-    redirect_to runners_path(project)
+    redirect_to project_runners_path(project), status: :found
   end
 end

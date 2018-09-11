@@ -1,21 +1,19 @@
 require 'spec_helper'
 
-describe API::API do
-  include ApiHelpers
-
+describe API::Triggers do
   let(:user) { create(:user) }
   let(:user2) { create(:user) }
   let!(:trigger_token) { 'secure_token' }
   let!(:trigger_token_2) { 'secure_token_2' }
-  let!(:project) { create(:project, creator_id: user.id) }
-  let!(:master) { create(:project_member, :master, user: user, project: project) }
+  let!(:project) { create(:project, :repository, creator: user) }
+  let!(:maintainer) { create(:project_member, :maintainer, user: user, project: project) }
   let!(:developer) { create(:project_member, :developer, user: user2, project: project) }
-  let!(:trigger) { create(:ci_trigger, project: project, token: trigger_token) }
-  let!(:trigger2) { create(:ci_trigger, project: project, token: trigger_token_2) }
+  let!(:trigger) { create(:ci_trigger, project: project, token: trigger_token, owner: user) }
+  let!(:trigger2) { create(:ci_trigger, project: project, token: trigger_token_2, owner: user2) }
   let!(:trigger_request) { create(:ci_trigger_request, trigger: trigger, created_at: '2015-01-01 12:13:14') }
 
-  describe 'POST /projects/:project_id/trigger' do
-    let!(:project2) { create(:empty_project) }
+  describe 'POST /projects/:project_id/trigger/pipeline' do
+    let!(:project2) { create(:project, :repository) }
     let(:options) do
       {
         token: trigger_token
@@ -23,40 +21,41 @@ describe API::API do
     end
 
     before do
-      stub_ci_commit_to_return_yaml_file
+      stub_ci_pipeline_to_return_yaml_file
     end
 
     context 'Handles errors' do
-      it 'should return bad request if token is missing' do
-        post api("/projects/#{project.id}/trigger/builds"), ref: 'master'
-        expect(response.status).to eq(400)
+      it 'returns bad request if token is missing' do
+        post api("/projects/#{project.id}/trigger/pipeline"), ref: 'master'
+
+        expect(response).to have_gitlab_http_status(400)
       end
 
-      it 'should return not found if project is not found' do
-        post api('/projects/0/trigger/builds'), options.merge(ref: 'master')
-        expect(response.status).to eq(404)
-      end
+      it 'returns not found if project is not found' do
+        post api('/projects/0/trigger/pipeline'), options.merge(ref: 'master')
 
-      it 'should return unauthorized if token is for different project' do
-        post api("/projects/#{project2.id}/trigger/builds"), options.merge(ref: 'master')
-        expect(response.status).to eq(401)
+        expect(response).to have_gitlab_http_status(404)
       end
     end
 
     context 'Have a commit' do
-      let(:commit) { project.ci_commits.last }
+      let(:pipeline) { project.pipelines.last }
 
-      it 'should create builds' do
-        post api("/projects/#{project.id}/trigger/builds"), options.merge(ref: 'master')
-        expect(response.status).to eq(201)
-        commit.builds.reload
-        expect(commit.builds.size).to eq(2)
+      it 'creates pipeline' do
+        post api("/projects/#{project.id}/trigger/pipeline"), options.merge(ref: 'master')
+
+        expect(response).to have_gitlab_http_status(201)
+        expect(json_response).to include('id' => pipeline.id)
+        pipeline.builds.reload
+        expect(pipeline.builds.pending.size).to eq(2)
+        expect(pipeline.builds.size).to eq(5)
       end
 
-      it 'should return bad request with no builds created if there\'s no commit for that ref' do
-        post api("/projects/#{project.id}/trigger/builds"), options.merge(ref: 'other-branch')
-        expect(response.status).to eq(400)
-        expect(json_response['message']).to eq('No builds created')
+      it 'returns bad request with no pipeline created if there\'s no commit for that ref' do
+        post api("/projects/#{project.id}/trigger/pipeline"), options.merge(ref: 'other-branch')
+
+        expect(response).to have_gitlab_http_status(400)
+        expect(json_response['message']).to eq('base' => ["Reference not found"])
       end
 
       context 'Validates variables' do
@@ -64,23 +63,69 @@ describe API::API do
           { 'TRIGGER_KEY' => 'TRIGGER_VALUE' }
         end
 
-        it 'should validate variables to be a hash' do
-          post api("/projects/#{project.id}/trigger/builds"), options.merge(variables: 'value', ref: 'master')
-          expect(response.status).to eq(400)
-          expect(json_response['message']).to eq('variables needs to be a hash')
+        it 'validates variables to be a hash' do
+          post api("/projects/#{project.id}/trigger/pipeline"), options.merge(variables: 'value', ref: 'master')
+
+          expect(response).to have_gitlab_http_status(400)
+          expect(json_response['error']).to eq('variables is invalid')
         end
 
-        it 'should validate variables needs to be a map of key-valued strings' do
-          post api("/projects/#{project.id}/trigger/builds"), options.merge(variables: { key: %w(1 2) }, ref: 'master')
-          expect(response.status).to eq(400)
+        it 'validates variables needs to be a map of key-valued strings' do
+          post api("/projects/#{project.id}/trigger/pipeline"), options.merge(variables: { key: %w(1 2) }, ref: 'master')
+
+          expect(response).to have_gitlab_http_status(400)
           expect(json_response['message']).to eq('variables needs to be a map of key-valued strings')
         end
 
-        it 'create trigger request with variables' do
-          post api("/projects/#{project.id}/trigger/builds"), options.merge(variables: variables, ref: 'master')
-          expect(response.status).to eq(201)
-          commit.builds.reload
-          expect(commit.builds.first.trigger_request.variables).to eq(variables)
+        it 'creates trigger request with variables' do
+          post api("/projects/#{project.id}/trigger/pipeline"), options.merge(variables: variables, ref: 'master')
+
+          expect(response).to have_gitlab_http_status(201)
+          expect(pipeline.variables.map { |v| { v.key => v.value } }.last).to eq(variables)
+        end
+      end
+
+      context 'when legacy trigger' do
+        before do
+          trigger.update(owner: nil)
+        end
+
+        it 'creates pipeline' do
+          post api("/projects/#{project.id}/trigger/pipeline"), options.merge(ref: 'master')
+
+          expect(response).to have_gitlab_http_status(201)
+          expect(json_response).to include('id' => pipeline.id)
+          pipeline.builds.reload
+          expect(pipeline.builds.pending.size).to eq(2)
+          expect(pipeline.builds.size).to eq(5)
+        end
+      end
+    end
+
+    context 'when triggering a pipeline from a trigger token' do
+      it 'does not leak the presence of project when token is for different project' do
+        post api("/projects/#{project2.id}/ref/master/trigger/pipeline?token=#{trigger_token}"), { ref: 'refs/heads/other-branch' }
+
+        expect(response).to have_gitlab_http_status(404)
+      end
+
+      it 'creates builds from the ref given in the URL, not in the body' do
+        expect do
+          post api("/projects/#{project.id}/ref/master/trigger/pipeline?token=#{trigger_token}"), { ref: 'refs/heads/other-branch' }
+        end.to change(project.builds, :count).by(5)
+
+        expect(response).to have_gitlab_http_status(201)
+      end
+
+      context 'when ref contains a dot' do
+        it 'creates builds from the ref given in the URL, not in the body' do
+          project.repository.create_file(user, '.gitlab/gitlabhq/new_feature.md', 'something valid', message: 'new_feature', branch_name: 'v.1-branch')
+
+          expect do
+            post api("/projects/#{project.id}/ref/v.1-branch/trigger/pipeline?token=#{trigger_token}"), { ref: 'refs/heads/other-branch' }
+          end.to change(project.builds, :count).by(4)
+
+          expect(response).to have_gitlab_http_status(201)
         end
       end
     end
@@ -88,123 +133,201 @@ describe API::API do
 
   describe 'GET /projects/:id/triggers' do
     context 'authenticated user with valid permissions' do
-      it 'should return list of triggers' do
+      it 'returns list of triggers' do
         get api("/projects/#{project.id}/triggers", user)
 
-        expect(response.status).to eq(200)
+        expect(response).to have_gitlab_http_status(200)
+        expect(response).to include_pagination_headers
         expect(json_response).to be_a(Array)
         expect(json_response[0]).to have_key('token')
       end
     end
 
     context 'authenticated user with invalid permissions' do
-      it 'should not return triggers list' do
+      it 'does not return triggers list' do
         get api("/projects/#{project.id}/triggers", user2)
 
-        expect(response.status).to eq(403)
+        expect(response).to have_gitlab_http_status(403)
       end
     end
 
     context 'unauthenticated user' do
-      it 'should not return triggers list' do
+      it 'does not return triggers list' do
         get api("/projects/#{project.id}/triggers")
 
-        expect(response.status).to eq(401)
+        expect(response).to have_gitlab_http_status(401)
       end
     end
   end
 
-  describe 'GET /projects/:id/triggers/:token' do
+  describe 'GET /projects/:id/triggers/:trigger_id' do
     context 'authenticated user with valid permissions' do
-      it 'should return trigger details' do
-        get api("/projects/#{project.id}/triggers/#{trigger.token}", user)
+      it 'returns trigger details' do
+        get api("/projects/#{project.id}/triggers/#{trigger.id}", user)
 
-        expect(response.status).to eq(200)
+        expect(response).to have_gitlab_http_status(200)
         expect(json_response).to be_a(Hash)
       end
 
-      it 'should respond with 404 Not Found if requesting non-existing trigger' do
-        get api("/projects/#{project.id}/triggers/abcdef012345", user)
+      it 'responds with 404 Not Found if requesting non-existing trigger' do
+        get api("/projects/#{project.id}/triggers/-5", user)
 
-        expect(response.status).to eq(404)
+        expect(response).to have_gitlab_http_status(404)
       end
     end
 
     context 'authenticated user with invalid permissions' do
-      it 'should not return triggers list' do
-        get api("/projects/#{project.id}/triggers/#{trigger.token}", user2)
+      it 'does not return triggers list' do
+        get api("/projects/#{project.id}/triggers/#{trigger.id}", user2)
 
-        expect(response.status).to eq(403)
+        expect(response).to have_gitlab_http_status(403)
       end
     end
 
     context 'unauthenticated user' do
-      it 'should not return triggers list' do
-        get api("/projects/#{project.id}/triggers/#{trigger.token}")
+      it 'does not return triggers list' do
+        get api("/projects/#{project.id}/triggers/#{trigger.id}")
 
-        expect(response.status).to eq(401)
+        expect(response).to have_gitlab_http_status(401)
       end
     end
   end
 
   describe 'POST /projects/:id/triggers' do
     context 'authenticated user with valid permissions' do
-      it 'should create trigger' do
-        expect do
-          post api("/projects/#{project.id}/triggers", user)
-        end.to change{project.triggers.count}.by(1)
+      context 'with required parameters' do
+        it 'creates trigger' do
+          expect do
+            post api("/projects/#{project.id}/triggers", user),
+              description: 'trigger'
+          end.to change {project.triggers.count}.by(1)
 
-        expect(response.status).to eq(201)
-        expect(json_response).to be_a(Hash)
+          expect(response).to have_gitlab_http_status(201)
+          expect(json_response).to include('description' => 'trigger')
+        end
+      end
+
+      context 'without required parameters' do
+        it 'does not create trigger' do
+          post api("/projects/#{project.id}/triggers", user)
+
+          expect(response).to have_gitlab_http_status(:bad_request)
+        end
       end
     end
 
     context 'authenticated user with invalid permissions' do
-      it 'should not create trigger' do
-        post api("/projects/#{project.id}/triggers", user2)
+      it 'does not create trigger' do
+        post api("/projects/#{project.id}/triggers", user2),
+          description: 'trigger'
 
-        expect(response.status).to eq(403)
+        expect(response).to have_gitlab_http_status(403)
       end
     end
 
     context 'unauthenticated user' do
-      it 'should not create trigger' do
-        post api("/projects/#{project.id}/triggers")
+      it 'does not create trigger' do
+        post api("/projects/#{project.id}/triggers"),
+          description: 'trigger'
 
-        expect(response.status).to eq(401)
+        expect(response).to have_gitlab_http_status(401)
       end
     end
   end
 
-  describe 'DELETE /projects/:id/triggers/:token' do
+  describe 'PUT /projects/:id/triggers/:trigger_id' do
     context 'authenticated user with valid permissions' do
-      it 'should delete trigger' do
-        expect do
-          delete api("/projects/#{project.id}/triggers/#{trigger.token}", user)
-        end.to change{project.triggers.count}.by(-1)
-        expect(response.status).to eq(200)
-      end
+      let(:new_description) { 'new description' }
 
-      it 'should respond with 404 Not Found if requesting non-existing trigger' do
-        delete api("/projects/#{project.id}/triggers/abcdef012345", user)
+      it 'updates description' do
+        put api("/projects/#{project.id}/triggers/#{trigger.id}", user),
+          description: new_description
 
-        expect(response.status).to eq(404)
+        expect(response).to have_gitlab_http_status(200)
+        expect(json_response).to include('description' => new_description)
+        expect(trigger.reload.description).to eq(new_description)
       end
     end
 
     context 'authenticated user with invalid permissions' do
-      it 'should not delete trigger' do
-        delete api("/projects/#{project.id}/triggers/#{trigger.token}", user2)
+      it 'does not update trigger' do
+        put api("/projects/#{project.id}/triggers/#{trigger.id}", user2)
 
-        expect(response.status).to eq(403)
+        expect(response).to have_gitlab_http_status(403)
       end
     end
 
     context 'unauthenticated user' do
-      it 'should not delete trigger' do
-        delete api("/projects/#{project.id}/triggers/#{trigger.token}")
+      it 'does not update trigger' do
+        put api("/projects/#{project.id}/triggers/#{trigger.id}")
 
-        expect(response.status).to eq(401)
+        expect(response).to have_gitlab_http_status(401)
+      end
+    end
+  end
+
+  describe 'POST /projects/:id/triggers/:trigger_id/take_ownership' do
+    context 'authenticated user with valid permissions' do
+      it 'updates owner' do
+        post api("/projects/#{project.id}/triggers/#{trigger.id}/take_ownership", user)
+
+        expect(response).to have_gitlab_http_status(200)
+        expect(json_response).to include('owner')
+        expect(trigger.reload.owner).to eq(user)
+      end
+    end
+
+    context 'authenticated user with invalid permissions' do
+      it 'does not update owner' do
+        post api("/projects/#{project.id}/triggers/#{trigger.id}/take_ownership", user2)
+
+        expect(response).to have_gitlab_http_status(403)
+      end
+    end
+
+    context 'unauthenticated user' do
+      it 'does not update owner' do
+        post api("/projects/#{project.id}/triggers/#{trigger.id}/take_ownership")
+
+        expect(response).to have_gitlab_http_status(401)
+      end
+    end
+  end
+
+  describe 'DELETE /projects/:id/triggers/:trigger_id' do
+    context 'authenticated user with valid permissions' do
+      it 'deletes trigger' do
+        expect do
+          delete api("/projects/#{project.id}/triggers/#{trigger.id}", user)
+
+          expect(response).to have_gitlab_http_status(204)
+        end.to change {project.triggers.count}.by(-1)
+      end
+
+      it 'responds with 404 Not Found if requesting non-existing trigger' do
+        delete api("/projects/#{project.id}/triggers/-5", user)
+
+        expect(response).to have_gitlab_http_status(404)
+      end
+
+      it_behaves_like '412 response' do
+        let(:request) { api("/projects/#{project.id}/triggers/#{trigger.id}", user) }
+      end
+    end
+
+    context 'authenticated user with invalid permissions' do
+      it 'does not delete trigger' do
+        delete api("/projects/#{project.id}/triggers/#{trigger.id}", user2)
+
+        expect(response).to have_gitlab_http_status(403)
+      end
+    end
+
+    context 'unauthenticated user' do
+      it 'does not delete trigger' do
+        delete api("/projects/#{project.id}/triggers/#{trigger.id}")
+
+        expect(response).to have_gitlab_http_status(401)
       end
     end
   end

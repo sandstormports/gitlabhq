@@ -1,17 +1,17 @@
 module BranchesHelper
-  def can_remove_branch?(project, branch_name)
-    if project.protected_branch? branch_name
-      false
-    elsif branch_name == project.repository.root_ref
-      false
-    else
-      can?(current_user, :push_code, project)
-    end
+  def project_branches
+    options_for_select(@project.repository.branch_names, @project.default_branch)
   end
 
-  def can_push_branch?(project, branch_name)
-    return false unless project.repository.branch_names.include?(branch_name)
+  def protected_branch?(project, branch)
+    ProtectedBranch.protected?(project, branch.name)
+  end
 
-    ::Gitlab::GitAccess.new(current_user, project).can_push_to_branch?(branch_name)
+  def diverging_count_label(count)
+    if count >= Repository::MAX_DIVERGING_COUNT
+      "#{Repository::MAX_DIVERGING_COUNT - 1}+"
+    else
+      count.to_s
+    end
   end
 end

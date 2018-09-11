@@ -41,7 +41,12 @@ module ActiveRecord
     # Abstract representation of an index definition on a table. Instances of
     # this type are typically created and returned by methods in database
     # adapters. e.g. ActiveRecord::ConnectionAdapters::AbstractMysqlAdapter#indexes
-    class IndexDefinition < Struct.new(:table, :name, :unique, :columns, :lengths, :orders, :where, :type, :using, :opclasses) #:nodoc:
+    attrs = [:table, :name, :unique, :columns, :lengths, :orders, :where, :type, :using, :opclasses]
+
+    # In Rails 5 the second last attribute is newly `:comment`
+    attrs.insert(-2, :comment) if Gitlab.rails5?
+
+    class IndexDefinition < Struct.new(*attrs) #:nodoc:
     end
   end
 end
@@ -107,8 +112,15 @@ module ActiveRecord
 
           result.map do |row|
             index_name = row[0]
-            unique = row[1] == 't'
+            unique = if Gitlab.rails5?
+                       row[1]
+                     else
+                       row[1] == 't'
+                     end
             indkey = row[2].split(" ")
+            if Gitlab.rails5?
+              indkey = indkey.map(&:to_i)
+            end
             inddef = row[3]
             oid = row[4]
 
@@ -127,7 +139,7 @@ module ActiveRecord
               orders = desc_order_columns.any? ? Hash[desc_order_columns.map {|order_column| [order_column, :desc]}] : {}
               where = inddef.scan(/WHERE (.+)$/).flatten[0]
               using = inddef.scan(/USING (.+?) /).flatten[0].to_sym
-              opclasses = Hash[inddef.scan(/\((.+)\)$/).flatten[0].split(',').map do |column_and_opclass|
+              opclasses = Hash[inddef.scan(/\((.+?)\)(?:$| WHERE )/).flatten[0].split(',').map do |column_and_opclass|
                                  column, opclass = column_and_opclass.split(' ').map(&:strip)
                                  [column, opclass] if opclass
                                end.compact]

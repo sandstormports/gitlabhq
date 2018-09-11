@@ -1,53 +1,35 @@
 module Banzai
   # Extract possible GFM references from an arbitrary String for further processing.
   class ReferenceExtractor
-    class << self
-      LAZY_KEY = :banzai_reference_extractor_lazy
-
-      def lazy?
-        Thread.current[LAZY_KEY]
-      end
-
-      def lazily(values = nil, &block)
-        return (values || block.call).uniq if lazy?
-
-        begin
-          Thread.current[LAZY_KEY] = true
-
-          values ||= block.call
-
-          Banzai::LazyReference.load(values.uniq).uniq
-        ensure
-          Thread.current[LAZY_KEY] = false
-        end
-      end
-    end
-
     def initialize
-      @texts = []
+      @texts_and_contexts = []
     end
 
     def analyze(text, context = {})
-      @texts << Renderer.render(text, context)
+      @texts_and_contexts << { text: text, context: context }
     end
 
-    def references(type, context = {})
-      filter = Banzai::Filter["#{type}_reference"]
+    def references(type, project, current_user = nil)
+      context = RenderContext.new(project, current_user)
+      processor = Banzai::ReferenceParser[type].new(context)
 
-      context.merge!(
-        pipeline: :reference_extraction,
+      processor.process(html_documents)
+    end
 
-        # ReferenceGathererFilter
-        reference_filter: filter
-      )
+    def reset_memoized_values
+      @html_documents     = nil
+      @texts_and_contexts = []
+    end
 
-      self.class.lazily do
-        @texts.flat_map do |html|
-          text_context = context.dup
-          result = Renderer.render_result(html, text_context)
-          result[:references][type]
-        end.uniq
-      end
+    private
+
+    def html_documents
+      # This ensures that we don't memoize anything until we have a number of
+      # text blobs to parse.
+      return [] if @texts_and_contexts.empty?
+
+      @html_documents ||= Renderer.cache_collection_render(@texts_and_contexts)
+        .map { |html| Nokogiri::HTML.fragment(html) }
     end
   end
 end

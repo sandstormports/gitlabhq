@@ -1,116 +1,148 @@
 module API
-  # Triggers API
   class Triggers < Grape::API
-    resource :projects do
-      # Trigger a GitLab project build
-      #
-      # Parameters:
-      #   id (required) - The ID of a CI project
-      #   ref (required) - The name of project's branch or tag
-      #   token (required) - The uniq token of trigger
-      #   variables (optional) - The list of variables to be injected into build
-      # Example Request:
-      #   POST /projects/:id/trigger/builds
-      post ":id/trigger/builds" do
-        required_attributes! [:ref, :token]
+    include PaginationParams
 
-        project = Project.find_with_namespace(params[:id]) || Project.find_by(id: params[:id])
-        trigger = Ci::Trigger.find_by_token(params[:token].to_s)
-        not_found! unless project && trigger
-        unauthorized! unless trigger.project == project
+    params do
+      requires :id, type: String, desc: 'The ID of a project'
+    end
+    resource :projects, requirements: API::PROJECT_ENDPOINT_REQUIREMENTS  do
+      desc 'Trigger a GitLab project pipeline' do
+        success Entities::Pipeline
+      end
+      params do
+        requires :ref, type: String, desc: 'The commit sha or name of a branch or tag'
+        requires :token, type: String, desc: 'The unique token of trigger'
+        optional :variables, type: Hash, desc: 'The list of variables to be injected into build'
+      end
+      post ":id/(ref/:ref/)trigger/pipeline", requirements: { ref: /.+/ } do
+        Gitlab::QueryLimiting.whitelist('https://gitlab.com/gitlab-org/gitlab-ce/issues/42283')
 
         # validate variables
-        variables = params[:variables]
-        if variables
-          unless variables.is_a?(Hash)
-            render_api_error!('variables needs to be a hash', 400)
-          end
-
-          unless variables.all? { |key, value| key.is_a?(String) && value.is_a?(String) }
-            render_api_error!('variables needs to be a map of key-valued strings', 400)
-          end
-
-          # convert variables from Mash to Hash
-          variables = variables.to_h
+        params[:variables] = params[:variables].to_h
+        unless params[:variables].all? { |key, value| key.is_a?(String) && value.is_a?(String) }
+          render_api_error!('variables needs to be a map of key-valued strings', 400)
         end
 
-        # create request and trigger builds
-        trigger_request = Ci::CreateTriggerRequestService.new.execute(project, trigger, params[:ref].to_s, variables)
-        if trigger_request
-          present trigger_request, with: Entities::TriggerRequest
+        project = find_project(params[:id])
+        not_found! unless project
+
+        result = Ci::PipelineTriggerService.new(project, nil, params).execute
+        not_found! unless result
+
+        if result[:http_status]
+          render_api_error!(result[:message], result[:http_status])
         else
-          errors = 'No builds created'
-          render_api_error!(errors, 400)
+          present result[:pipeline], with: Entities::Pipeline
         end
       end
 
-      # Get triggers list
-      #
-      # Parameters:
-      #   id (required) - The ID of a project
-      #   page (optional) - The page number for pagination
-      #   per_page (optional) - The value of items per page to show
-      # Example Request:
-      #   GET /projects/:id/triggers
+      desc 'Get triggers list' do
+        success Entities::Trigger
+      end
+      params do
+        use :pagination
+      end
       get ':id/triggers' do
         authenticate!
         authorize! :admin_build, user_project
 
         triggers = user_project.triggers.includes(:trigger_requests)
-        triggers = paginate(triggers)
 
-        present triggers, with: Entities::Trigger
+        present paginate(triggers), with: Entities::Trigger
       end
 
-      # Get specific trigger of a project
-      #
-      # Parameters:
-      #   id (required) - The ID of a project
-      #   token (required) - The `token` of a trigger
-      # Example Request:
-      #   GET /projects/:id/triggers/:token
-      get ':id/triggers/:token' do
+      desc 'Get specific trigger of a project' do
+        success Entities::Trigger
+      end
+      params do
+        requires :trigger_id, type: Integer,  desc: 'The trigger ID'
+      end
+      get ':id/triggers/:trigger_id' do
         authenticate!
         authorize! :admin_build, user_project
 
-        trigger = user_project.triggers.find_by(token: params[:token].to_s)
-        return not_found!('Trigger') unless trigger
+        trigger = user_project.triggers.find(params.delete(:trigger_id))
+        break not_found!('Trigger') unless trigger
 
         present trigger, with: Entities::Trigger
       end
 
-      # Create trigger
-      #
-      # Parameters:
-      #   id (required) - The ID of a project
-      # Example Request:
-      #   POST /projects/:id/triggers
+      desc 'Create a trigger' do
+        success Entities::Trigger
+      end
+      params do
+        requires :description, type: String,  desc: 'The trigger description'
+      end
       post ':id/triggers' do
         authenticate!
         authorize! :admin_build, user_project
 
-        trigger = user_project.triggers.create
+        trigger = user_project.triggers.create(
+          declared_params(include_missing: false).merge(owner: current_user))
 
-        present trigger, with: Entities::Trigger
+        if trigger.valid?
+          present trigger, with: Entities::Trigger
+        else
+          render_validation_error!(trigger)
+        end
       end
 
-      # Delete trigger
-      #
-      # Parameters:
-      #   id (required) - The ID of a project
-      #   token (required) - The `token` of a trigger
-      # Example Request:
-      #   DELETE /projects/:id/triggers/:token
-      delete ':id/triggers/:token' do
+      desc 'Update a trigger' do
+        success Entities::Trigger
+      end
+      params do
+        requires :trigger_id, type: Integer,  desc: 'The trigger ID'
+        optional :description, type: String,  desc: 'The trigger description'
+      end
+      put ':id/triggers/:trigger_id' do
         authenticate!
         authorize! :admin_build, user_project
 
-        trigger = user_project.triggers.find_by(token: params[:token].to_s)
-        return not_found!('Trigger') unless trigger
+        trigger = user_project.triggers.find(params.delete(:trigger_id))
+        break not_found!('Trigger') unless trigger
 
-        trigger.destroy
+        if trigger.update(declared_params(include_missing: false))
+          present trigger, with: Entities::Trigger
+        else
+          render_validation_error!(trigger)
+        end
+      end
 
-        present trigger, with: Entities::Trigger
+      desc 'Take ownership of trigger' do
+        success Entities::Trigger
+      end
+      params do
+        requires :trigger_id, type: Integer,  desc: 'The trigger ID'
+      end
+      post ':id/triggers/:trigger_id/take_ownership' do
+        authenticate!
+        authorize! :admin_build, user_project
+
+        trigger = user_project.triggers.find(params.delete(:trigger_id))
+        break not_found!('Trigger') unless trigger
+
+        if trigger.update(owner: current_user)
+          status :ok
+          present trigger, with: Entities::Trigger
+        else
+          render_validation_error!(trigger)
+        end
+      end
+
+      desc 'Delete a trigger' do
+        success Entities::Trigger
+      end
+      params do
+        requires :trigger_id, type: Integer,  desc: 'The trigger ID'
+      end
+      delete ':id/triggers/:trigger_id' do
+        authenticate!
+        authorize! :admin_build, user_project
+
+        trigger = user_project.triggers.find(params.delete(:trigger_id))
+        break not_found!('Trigger') unless trigger
+
+        destroy_conditionally!(trigger)
       end
     end
   end

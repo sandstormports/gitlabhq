@@ -1,7 +1,8 @@
 class GroupsController < Groups::ApplicationController
-  include FilterProjects
   include IssuesAction
   include MergeRequestsAction
+  include ParamsBackwardCompatibility
+  include PreviewMarkdown
 
   respond_to :html
 
@@ -9,12 +10,19 @@ class GroupsController < Groups::ApplicationController
   before_action :group, except: [:index, :new, :create]
 
   # Authorize
-  before_action :authorize_admin_group!, only: [:edit, :update, :destroy, :projects]
-  before_action :authorize_create_group!, only: [:new, :create]
+  before_action :authorize_admin_group!, only: [:edit, :update, :destroy, :projects, :transfer]
+  before_action :authorize_create_group!, only: [:new]
 
-  # Load group projects
-  before_action :group_projects, only: [:show, :projects, :activity, :issues, :merge_requests]
+  before_action :group_projects, only: [:projects, :activity, :issues, :merge_requests]
   before_action :event_filter, only: [:activity]
+
+  before_action :user_actions, only: [:show, :subgroups]
+
+  skip_cross_project_access_check :index, :new, :create, :edit, :update,
+                                  :destroy, :projects
+  # When loading show as an atom feed, we render events that could leak cross
+  # project information
+  skip_cross_project_access_check :show, if: -> { request.format.html? }
 
   layout :determine_layout
 
@@ -23,45 +31,36 @@ class GroupsController < Groups::ApplicationController
   end
 
   def new
-    @group = Group.new
+    @group = Group.new(params.permit(:parent_id))
   end
 
   def create
     @group = Groups::CreateService.new(current_user, group_params).execute
 
     if @group.persisted?
-      redirect_to @group, notice: "Group '#{@group.name}' was successfully created."
+      notice = if @group.chat_team.present?
+                 "Group '#{@group.name}' and its Mattermost team were successfully created."
+               else
+                 "Group '#{@group.name}' was successfully created."
+               end
+
+      redirect_to @group, notice: notice
     else
       render action: "new"
     end
   end
 
   def show
-    redirect_to '/gitlab/repo'
-    return
-
-    @last_push = current_user.recent_push if current_user
-
-    @projects = @projects.includes(:namespace)
-    @projects = @projects.sorted_by_activity
-    @projects = filter_projects(@projects)
-    @projects = @projects.sort(@sort = params[:sort])
-    @projects = @projects.page(params[:page]) if params[:filter_projects].blank?
-
-    @shared_projects = GroupProjectsFinder.new(group, only_shared: true).execute(current_user)
-
     respond_to do |format|
-      format.html
-
-      format.json do
-        render json: {
-          html: view_to_html_string("dashboard/projects/_projects", locals: { projects: @projects })
-        }
+      format.html do
+        @has_children = GroupDescendantsFinder.new(current_user: current_user,
+                                                   parent_group: @group,
+                                                   params: params).has_children?
       end
 
       format.atom do
         load_events
-        render layout: false
+        render layout: 'xml.atom'
       end
     end
   end
@@ -81,29 +80,49 @@ class GroupsController < Groups::ApplicationController
   end
 
   def projects
-    @projects = @group.projects.page(params[:page])
+    @projects = @group.projects.with_statistics.page(params[:page])
   end
 
   def update
     if Groups::UpdateService.new(@group, current_user, group_params).execute
       redirect_to edit_group_path(@group), notice: "Group '#{@group.name}' was successfully updated."
     else
+      @group.restore_path!
+
       render action: "edit"
     end
   end
 
   def destroy
-    DestroyGroupService.new(@group, current_user).execute
+    Groups::DestroyService.new(@group, current_user).async_execute
 
-    redirect_to root_path, alert: "Group '#{@group.name}' was successfully deleted."
+    redirect_to root_path, status: 302, alert: "Group '#{@group.name}' was scheduled for deletion."
+  end
+
+  def transfer
+    parent_group = Group.find_by(id: params[:new_parent_group_id])
+    service = ::Groups::TransferService.new(@group, current_user)
+
+    if service.execute(parent_group)
+      flash[:notice] = "Group '#{@group.name}' was successfully transferred."
+      redirect_to group_path(@group)
+    else
+      flash.now[:alert] = service.error
+      render :edit
+    end
   end
 
   protected
 
   def authorize_create_group!
-    unless can?(current_user, :create_group, nil)
-      return render_404
-    end
+    allowed = if params[:parent_id].present?
+                parent = Group.find_by(id: params[:parent_id])
+                can?(current_user, :create_subgroup, parent)
+              else
+                can?(current_user, :create_group)
+              end
+
+    render_404 unless allowed
   end
 
   def determine_layout
@@ -117,12 +136,59 @@ class GroupsController < Groups::ApplicationController
   end
 
   def group_params
-    params.require(:group).permit(:name, :description, :path, :avatar, :public, :visibility_level, :share_with_group_lock)
+    params.require(:group).permit(group_params_attributes)
+  end
+
+  def group_params_attributes
+    [
+      :avatar,
+      :description,
+      :lfs_enabled,
+      :name,
+      :path,
+      :public,
+      :request_access_enabled,
+      :share_with_group_lock,
+      :visibility_level,
+      :parent_id,
+      :create_chat_team,
+      :chat_team_name,
+      :require_two_factor_authentication,
+      :two_factor_grace_period
+    ]
   end
 
   def load_events
-    @events = Event.in_projects(@projects)
-    @events = event_filter.apply_filter(@events).with_associations
-    @events = @events.limit(20).offset(params[:offset] || 0)
+    params[:sort] ||= 'latest_activity_desc'
+
+    options = {}
+    options[:only_owned] = true if params[:shared] == '0'
+    options[:only_shared] = true if params[:shared] == '1'
+
+    @projects = GroupProjectsFinder.new(params: params, group: group, options: options, current_user: current_user)
+                  .execute
+                  .includes(:namespace)
+
+    @events = EventCollection
+      .new(@projects, offset: params[:offset].to_i, filter: event_filter)
+      .to_a
+
+    Events::RenderService
+      .new(current_user)
+      .execute(@events, atom_request: request.format.atom?)
+  end
+
+  def user_actions
+    if current_user
+      @notification_setting = current_user.notification_settings_for(group)
+    end
+  end
+
+  def build_canonical_path(group)
+    return group_path(group) if action_name == 'show' # root group path
+
+    params[:id] = group.to_param
+
+    url_for(safe_params)
   end
 end

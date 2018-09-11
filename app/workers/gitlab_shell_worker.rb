@@ -1,10 +1,10 @@
+# frozen_string_literal: true
+
 class GitlabShellWorker
-  include Sidekiq::Worker
+  include ApplicationWorker
   include Gitlab::ShellAdapter
 
-  sidekiq_options queue: :gitlab_shell
-
   def perform(action, *arg)
-    gitlab_shell.send(action, *arg)
+    gitlab_shell.__send__(action, *arg) # rubocop:disable GitlabSecurity/PublicSend
   end
 end

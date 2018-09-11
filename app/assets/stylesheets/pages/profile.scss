@@ -5,7 +5,7 @@
 }
 
 .avatar-image {
-  @media (min-width: $screen-sm-min) {
+  @include media-breakpoint-up(sm) {
     float: left;
     margin-bottom: 0;
   }
@@ -18,8 +18,13 @@
 }
 
 .account-btn-link,
-.profile-settings-sidebar a {
+.profile-settings-sidebar a,
+.settings-sidebar a {
   color: $md-link-color;
+}
+
+.private-tokens-reset div.reset-action:not(:first-child) {
+  padding-top: 15px;
 }
 
 .oauth-buttons {
@@ -55,8 +60,8 @@
 
 .account-well {
   padding: 10px;
-  background-color: $help-well-bg;
-  border: 1px solid $help-well-border;
+  background-color: $gray-light;
+  border: 1px solid $border-color;
   border-radius: $border-radius-base;
 
   ul {
@@ -65,31 +70,24 @@
   }
 }
 
-.calendar-hint {
-  margin-top: -12px;
-  float: right;
-  font-size: 12px;
-}
-
 .profile-link-holder {
   display: inline;
 
-  a {
-    color: $blue-dark;
+  a:not(.text-link) {
     text-decoration: none;
   }
 }
 
 // Middle dot divider between each element in a list of items.
 .middle-dot-divider {
-  &:after {
+  &::after {
     content: "\00B7"; // Middle Dot
     padding: 0 6px;
-    font-weight: bold;
+    font-weight: $gl-font-weight-bold;
   }
 
   &:last-child {
-    &:after {
+    &::after {
       content: "";
       padding: 0;
     }
@@ -98,8 +96,9 @@
 
 .profile-user-bio {
   // Limits the width of the user bio for readability.
-  max-width: 750px;
-  margin: auto;
+  max-width: 600px;
+  margin: 10px auto;
+  padding: 0 16px;
 }
 
 .user-avatar-button {
@@ -109,9 +108,18 @@
   }
 }
 
+.subkeys-list {
+  @include basic-list;
+
+  li {
+    padding: 3px 0;
+    border: 0;
+  }
+}
+
 .key-list-item {
   .key-list-item-info {
-    @media (min-width: $screen-sm-min) {
+    @include media-breakpoint-up(sm) {
       float: left;
     }
   }
@@ -121,12 +129,6 @@
     text-overflow: ellipsis;
     overflow: hidden;
   }
-}
-
-.key-icon {
-  color: $ssh-key-icon-color;
-  font-size: $ssh-key-icon-size;
-  line-height: 42px;
 }
 
 .key-created-at {
@@ -139,18 +141,10 @@
   }
 }
 
-.change-username-title {
-  color: $gl-warning;
-}
-
-.remove-account-title {
-  color: $gl-danger;
-}
-
 .provider-btn-group {
   display: inline-block;
   margin-right: 10px;
-  border: 1px solid $provider-btn-group-border;
+  border: 1px solid $border-color;
   border-radius: 3px;
 
   &:last-child {
@@ -161,7 +155,7 @@
 .provider-btn-image {
   display: inline-block;
   padding: 5px 10px;
-  border-right: 1px solid $provider-btn-group-border;
+  border-right: 1px solid $border-color;
 
   > img {
     width: 20px;
@@ -180,14 +174,6 @@
   }
 }
 
-.profile-settings-message {
-  line-height: 32px;
-  color: $warning-message-color;
-  background-color: $warning-message-bg;
-  border: 1px solid $warning-message-border;
-  border-radius: $border-radius-base;
-}
-
 .oauth-applications {
   form {
     display: inline-block;
@@ -202,7 +188,7 @@
   .modal-dialog {
     width: 380px;
 
-    @media (max-width: $screen-sm-min) {
+    @include media-breakpoint-down(xs) {
       width: auto;
     }
 
@@ -216,5 +202,239 @@
   .crop-controls {
     padding: 10px 0 0;
     text-align: center;
+  }
+}
+
+.personal-access-tokens-never-expires-label {
+  color: $note-disabled-comment-color;
+}
+
+.created-personal-access-token-container {
+  .btn-clipboard {
+    border: 1px solid $border-color;
+  }
+}
+
+
+.user-profile {
+  .cover-controls a {
+    margin-left: 5px;
+  }
+
+  .profile-header {
+    margin: 0 auto;
+
+    .avatar-holder {
+      width: 90px;
+      margin: 0 auto 10px;
+    }
+  }
+
+  .user-profile-nav {
+    font-size: 0;
+  }
+
+  .fade-right {
+    right: 0;
+  }
+
+  .fade-left {
+    left: 0;
+  }
+
+  @include media-breakpoint-down(xs) {
+    .cover-block {
+      padding-top: 20px;
+    }
+
+    .cover-controls {
+      position: static;
+      padding: 0 16px;
+      margin-bottom: 20px;
+      display: -webkit-flex;
+      display: flex;
+
+      .btn {
+        -webkit-flex-grow: 1;
+        flex-grow: 1;
+
+        &:first-child {
+          margin-left: 0;
+        }
+      }
+    }
+
+    .user-profile-nav {
+      a {
+        margin-right: 0;
+      }
+    }
+  }
+}
+
+table.u2f-registrations {
+  th:not(:last-child),
+  td:not(:last-child) {
+    border-right: solid 1px transparent;
+  }
+}
+
+.oauth-application-show {
+  .scope-name {
+    font-weight: $gl-font-weight-bold;
+  }
+
+  .scopes-list {
+    padding-left: 18px;
+  }
+}
+
+.user-callout {
+  margin: 20px -5px 0;
+
+  .bordered-box {
+    border: 1px solid $blue-300;
+    border-radius: $border-radius-default;
+    background-color: $blue-50;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .landing {
+    padding: 32px;
+
+    .close {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      opacity: 1;
+
+      .dismiss-icon {
+        float: right;
+        cursor: pointer;
+        color: $blue-300;
+      }
+
+      &:hover {
+        background-color: transparent;
+        border: 0;
+
+        .dismiss-icon {
+          color: $blue-400;
+        }
+      }
+    }
+
+    .svg-container {
+      margin-right: 30px;
+      display: inline-block;
+
+      svg {
+        height: 110px;
+        vertical-align: top;
+      }
+
+      &.convdev {
+        margin: 0 0 0 30px;
+
+        svg {
+          height: 127px;
+        }
+      }
+    }
+
+    .user-callout-copy {
+      display: inline-block;
+      vertical-align: top;
+      max-width: 570px;
+    }
+  }
+
+  @include media-breakpoint-down(xs) {
+    text-align: center;
+
+    .bordered-box {
+      display: block;
+    }
+
+    .landing {
+      .svg-container,
+      .user-callout-copy {
+        margin: 0 auto;
+        display: block;
+
+        svg {
+          height: 75px;
+        }
+
+        &.convdev {
+          margin: $gl-padding auto 0;
+
+          svg {
+            height: 120px;
+          }
+        }
+      }
+    }
+  }
+}
+
+.nav-wip {
+  border: 1px solid $blue-500;
+  background: $blue-50;
+  padding: $gl-padding;
+  margin-bottom: $gl-padding;
+
+  a {
+    color: $blue-500;
+  }
+
+  p:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.email-badge {
+  display: inline;
+  margin-right: $gl-padding / 2;
+
+  .email-badge-email {
+    display: inline;
+    margin-right: $gl-padding / 4;
+  }
+
+  .badge-verification-status {
+    border-width: 1px;
+    border-style: solid;
+
+    &.verified {
+      @include green-status-color;
+    }
+
+    &.unverified {
+      @include status-color($gray-dark, color("gray"), $common-gray-dark);
+    }
+  }
+}
+
+.edit-user {
+  .clear-user-status {
+    svg {
+      fill: $gl-text-color-secondary;
+    }
+  }
+
+  .emoji-menu-toggle-button {
+    @extend .note-action-button;
+
+    .no-emoji-placeholder {
+      position: relative;
+
+      svg {
+        fill: $gl-text-color-secondary;
+      }
+    }
   }
 }

@@ -1,9 +1,7 @@
 module Gitlab
   module Metrics
-    # Rack middleware for tracking Rails requests.
+    # Rack middleware for tracking Rails and Grape requests.
     class RackMiddleware
-      CONTROLLER_KEY = 'action_controller.instance'
-
       def initialize(app)
         @app = app
       end
@@ -16,13 +14,13 @@ module Gitlab
         begin
           retval = trans.run { @app.call(env) }
 
+        rescue Exception => error # rubocop: disable Lint/RescueException
+          trans.add_event(:rails_exception)
+
+          raise error
         # Even in the event of an error we want to submit any metrics we
         # might've gathered up to this point.
         ensure
-          if env[CONTROLLER_KEY]
-            tag_controller(trans, env)
-          end
-
           trans.finish
         end
 
@@ -30,17 +28,18 @@ module Gitlab
       end
 
       def transaction_from_env(env)
-        trans = Transaction.new
+        trans = WebTransaction.new(env)
 
-        trans.set(:request_uri, env['REQUEST_URI'])
-        trans.set(:request_method, env['REQUEST_METHOD'])
+        trans.set(:request_uri, filtered_path(env), false)
+        trans.set(:request_method, env['REQUEST_METHOD'], false)
 
         trans
       end
 
-      def tag_controller(trans, env)
-        controller   = env[CONTROLLER_KEY]
-        trans.action = "#{controller.class.name}##{controller.action_name}"
+      private
+
+      def filtered_path(env)
+        ActionDispatch::Request.new(env).filtered_path.presence || env['REQUEST_URI']
       end
     end
   end

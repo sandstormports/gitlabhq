@@ -1,6 +1,6 @@
 # == Mentionable concern
 #
-# Contains functionality related to objects that can mention Users, Issues, MergeRequests, or Commits by
+# Contains functionality related to objects that can mention Users, Issues, MergeRequests, Commits or Snippets by
 # GFM references.
 #
 # Used by Issue, Note, MergeRequest, and Commit.
@@ -14,16 +14,16 @@ module Mentionable
       attr = attr.to_s
       mentionable_attrs << [attr, options]
     end
-
-    # Accessor for attributes marked mentionable.
-    def mentionable_attrs
-      @mentionable_attrs ||= []
-    end
   end
 
   included do
+    # Accessor for attributes marked mentionable.
+    cattr_accessor :mentionable_attrs, instance_accessor: false do
+      []
+    end
+
     if self < Participable
-      participant ->(current_user) { mentioned_users(current_user) }
+      participant -> (user, ext) { all_references(user, extractor: ext) }
     end
   end
 
@@ -31,11 +31,11 @@ module Mentionable
   #
   # By default this will be the class name and the result of calling
   # `to_reference` on the object.
-  def gfm_reference(from_project = nil)
+  def gfm_reference(from = nil)
     # "MergeRequest" > "merge_request" > "Merge request" > "merge request"
     friendly_name = self.class.to_s.underscore.humanize.downcase
 
-    "#{friendly_name} #{to_reference(from_project)}"
+    "#{friendly_name} #{to_reference(from)}"
   end
 
   # The GFM reference to this Mentionable, which shouldn't be included in its #references.
@@ -43,32 +43,47 @@ module Mentionable
     self
   end
 
-  def all_references(current_user = self.author, text = nil)
-    ext = Gitlab::ReferenceExtractor.new(self.project, current_user, self.author)
-
-    if text
-      ext.analyze(text)
+  def all_references(current_user = nil, extractor: nil)
+    # Use custom extractor if it's passed in the function parameters.
+    if extractor
+      extractors[current_user] = extractor
     else
-      self.class.mentionable_attrs.each do |attr, options|
-        text = send(attr)
+      extractor = extractors[current_user] ||= Gitlab::ReferenceExtractor.new(project, current_user)
 
-        context = options.dup
-        context[:cache_key] = [self, attr] if context.delete(:cache) && self.persisted?
-
-        ext.analyze(text, context)
-      end
+      extractor.reset_memoized_values
     end
 
-    ext
+    self.class.mentionable_attrs.each do |attr, options|
+      text    = __send__(attr) # rubocop:disable GitlabSecurity/PublicSend
+      options = options.merge(
+        cache_key: [self, attr],
+        author: author,
+        skip_project_check: skip_project_check?
+      )
+
+      extractor.analyze(text, options)
+    end
+
+    extractor
+  end
+
+  def extractors
+    @extractors ||= {}
   end
 
   def mentioned_users(current_user = nil)
     all_references(current_user).users
   end
 
+  def directly_addressed_users(current_user = nil)
+    all_references(current_user).directly_addressed_users
+  end
+
   # Extract GFM references to other Mentionables from this Mentionable. Always excludes its #local_reference.
-  def referenced_mentionables(current_user = self.author, text = nil)
-    refs = all_references(current_user, text)
+  def referenced_mentionables(current_user = self.author)
+    return [] unless matches_cross_reference_regex?
+
+    refs = all_references(current_user)
     refs = (refs.issues + refs.merge_requests + refs.commits)
 
     # We're using this method instead of Array diffing because that requires
@@ -77,9 +92,23 @@ module Mentionable
     refs.reject { |ref| ref == local_reference }
   end
 
+  # Uses regex to quickly determine if mentionables might be referenced
+  # Allows heavy processing to be skipped
+  def matches_cross_reference_regex?
+    reference_pattern = if !project || project.default_issues_tracker?
+                          ReferenceRegexes::DEFAULT_PATTERN
+                        else
+                          ReferenceRegexes::EXTERNAL_PATTERN
+                        end
+
+    self.class.mentionable_attrs.any? do |attr, _|
+      __send__(attr) =~ reference_pattern # rubocop:disable GitlabSecurity/PublicSend
+    end
+  end
+
   # Create a cross-reference Note for each GFM reference to another Mentionable found in the +mentionable_attrs+.
-  def create_cross_references!(author = self.author, without = [], text = nil)
-    refs = referenced_mentionables(author, text)
+  def create_cross_references!(author = self.author, without = [])
+    refs = referenced_mentionables(author)
 
     # We're using this method instead of Array diffing because that requires
     # both of the object's `hash` values to be the same, which may not be the
@@ -98,10 +127,7 @@ module Mentionable
 
     return if changes.empty?
 
-    original_text = changes.collect { |_, vals| vals.first }.join(' ')
-
-    preexisting = referenced_mentionables(author, original_text)
-    create_cross_references!(author, preexisting)
+    create_cross_references!(author)
   end
 
   private
@@ -128,5 +154,9 @@ module Mentionable
   # the specified target.
   def cross_reference_exists?(target)
     SystemNoteService.cross_reference_exists?(target, local_reference)
+  end
+
+  def skip_project_check?
+    false
   end
 end

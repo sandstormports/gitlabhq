@@ -1,60 +1,77 @@
-# == Schema Information
-#
-# Table name: namespaces
-#
-#  id                     :integer          not null, primary key
-#  name                   :string(255)      not null
-#  path                   :string(255)      not null
-#  owner_id               :integer
-#  visibility_level       :integer          default(20), not null
-#  created_at             :datetime
-#  updated_at             :datetime
-#  type                   :string(255)
-#  description            :string(255)      default(""), not null
-#  avatar                 :string(255)
-#
+# frozen_string_literal: true
 
 require 'carrierwave/orm/activerecord'
 
 class Group < Namespace
   include Gitlab::ConfigHelper
-  include Gitlab::VisibilityLevel
+  include AfterCommitQueue
+  include AccessRequestable
+  include Avatarable
   include Referable
+  include SelectForProjectAuthorization
+  include LoadedInGroupList
+  include GroupDescendant
+  include TokenAuthenticatable
+  include WithUploads
+  include Gitlab::Utils::StrongMemoize
 
-  has_many :group_members, dependent: :destroy, as: :source, class_name: 'GroupMember'
+  has_many :group_members, -> { where(requested_at: nil) }, dependent: :destroy, as: :source # rubocop:disable Cop/ActiveRecordDependent
   alias_method :members, :group_members
   has_many :users, through: :group_members
-  has_many :project_group_links, dependent: :destroy
+  has_many :owners,
+    -> { where(members: { access_level: Gitlab::Access::OWNER }) },
+    through: :group_members,
+    source: :user
+
+  has_many :requesters, -> { where.not(requested_at: nil) }, dependent: :destroy, as: :source, class_name: 'GroupMember' # rubocop:disable Cop/ActiveRecordDependent
+  has_many :members_and_requesters, as: :source, class_name: 'GroupMember'
+
+  has_many :milestones
+  has_many :project_group_links, dependent: :destroy # rubocop:disable Cop/ActiveRecordDependent
   has_many :shared_projects, through: :project_group_links, source: :project
-  has_many :notification_settings, dependent: :destroy, as: :source
 
-  validate :avatar_type, if: ->(user) { user.avatar.present? && user.avatar_changed? }
+  # Overridden on another method
+  # Left here just to be dependent: :destroy
+  has_many :notification_settings, dependent: :destroy, as: :source # rubocop:disable Cop/ActiveRecordDependent
+
+  has_many :labels, class_name: 'GroupLabel'
+  has_many :variables, class_name: 'Ci::GroupVariable'
+  has_many :custom_attributes, class_name: 'GroupCustomAttribute'
+
+  has_many :boards
+  has_many :badges, class_name: 'GroupBadge'
+
+  has_many :todos
+
+  accepts_nested_attributes_for :variables, allow_destroy: true
+
   validate :visibility_level_allowed_by_projects
+  validate :visibility_level_allowed_by_sub_groups
+  validate :visibility_level_allowed_by_parent
+  validates :variables, variable_duplicates: true
 
-  validates :avatar, file_size: { maximum: 200.kilobytes.to_i }
+  validates :two_factor_grace_period, presence: true, numericality: { greater_than_or_equal_to: 0 }
 
-  mount_uploader :avatar, AvatarUploader
+  add_authentication_token_field :runners_token
 
   after_create :post_create_hook
   after_destroy :post_destroy_hook
+  after_save :update_two_factor_requirement
+  after_update :path_changed_hook, if: :path_changed?
 
   class << self
-    # Searches for groups matching the given query.
-    #
-    # This method uses ILIKE on PostgreSQL and LIKE on MySQL.
-    #
-    # query - The search query as a String
-    #
-    # Returns an ActiveRecord::Relation.
-    def search(query)
-      table   = Namespace.arel_table
-      pattern = "%#{query}%"
-
-      where(table[:name].matches(pattern).or(table[:path].matches(pattern)))
+    def supports_nested_groups?
+      Gitlab::Database.postgresql?
     end
 
-    def sort(method)
-      order_by(method)
+    def sort_by_attribute(method)
+      if method == 'storage_size_desc'
+        # storage_size is a virtual column so we need to
+        # pass a string to avoid AR adding the table name
+        reorder('storage_size DESC, namespaces.id DESC')
+      else
+        order_by(method)
+      end
     end
 
     def reference_prefix
@@ -68,87 +85,143 @@ class Group < Namespace
     def visible_to_user(user)
       where(id: user.authorized_groups.select(:id).reorder(nil))
     end
+
+    def select_for_project_authorization
+      if current_scope.joins_values.include?(:shared_projects)
+        joins('INNER JOIN namespaces project_namespace ON project_namespace.id = projects.namespace_id')
+          .where('project_namespace.share_with_group_lock = ?',  false)
+          .select("projects.id AS project_id, LEAST(project_group_links.group_access, members.access_level) AS access_level")
+      else
+        super
+      end
+    end
   end
 
-  def to_reference(_from_project = nil)
-    "#{self.class.reference_prefix}#{name}"
+  # Overrides notification_settings has_many association
+  # This allows to apply notification settings from parent groups
+  # to child groups and projects.
+  def notification_settings
+    source_type = self.class.base_class.name
+
+    NotificationSetting.where(source_type: source_type, source_id: self_and_ancestors_ids)
+  end
+
+  def to_reference(_from = nil, full: nil)
+    "#{self.class.reference_prefix}#{full_path}"
+  end
+
+  def web_url
+    Gitlab::Routing.url_helpers.group_canonical_url(self)
   end
 
   def human_name
-    name
+    full_name
   end
 
-  def visibility_level_field
-    visibility_level
+  def visibility_level_allowed_by_parent?(level = self.visibility_level)
+    return true unless parent_id && parent_id.nonzero?
+
+    level <= parent.visibility_level
   end
 
-  def visibility_level_allowed_by_projects
-    allowed_by_projects = self.projects.where('visibility_level > ?', self.visibility_level).none?
-
-    unless allowed_by_projects
-      level_name = Gitlab::VisibilityLevel.level_name(visibility_level).downcase
-      self.errors.add(:visibility_level, "#{level_name} is not allowed since there are projects with higher visibility.")
-    end
-
-    allowed_by_projects
+  def visibility_level_allowed_by_projects?(level = self.visibility_level)
+    !projects.where('visibility_level > ?', level).exists?
   end
 
-  def avatar_url(size = nil)
-    if avatar.present?
-      [gitlab_config.url, avatar.url].join
-    end
+  def visibility_level_allowed_by_sub_groups?(level = self.visibility_level)
+    !children.where('visibility_level > ?', level).exists?
   end
 
-  def owners
-    @owners ||= group_members.owners.includes(:user).map(&:user)
+  def visibility_level_allowed?(level = self.visibility_level)
+    visibility_level_allowed_by_parent?(level) &&
+      visibility_level_allowed_by_projects?(level) &&
+      visibility_level_allowed_by_sub_groups?(level)
   end
 
-  def add_users(user_ids, access_level, current_user = nil)
-    user_ids.each do |user_id|
-      Member.add_user(self.group_members, user_id, access_level, current_user)
-    end
+  def lfs_enabled?
+    return false unless Gitlab.config.lfs.enabled
+    return Gitlab.config.lfs.enabled if self[:lfs_enabled].nil?
+
+    self[:lfs_enabled]
   end
 
-  def add_user(user, access_level, current_user = nil)
-    add_users([user], access_level, current_user)
-  end
-
-  def add_guest(user, current_user = nil)
-    add_user(user, Gitlab::Access::GUEST, current_user)
-  end
-
-  def add_reporter(user, current_user = nil)
-    add_user(user, Gitlab::Access::REPORTER, current_user)
-  end
-
-  def add_developer(user, current_user = nil)
-    add_user(user, Gitlab::Access::DEVELOPER, current_user)
-  end
-
-  def add_master(user, current_user = nil)
-    add_user(user, Gitlab::Access::MASTER, current_user)
-  end
-
-  def add_owner(user, current_user = nil)
-    add_user(user, Gitlab::Access::OWNER, current_user)
-  end
-
-  def has_owner?(user)
+  def owned_by?(user)
     owners.include?(user)
   end
 
-  def has_master?(user)
-    members.masters.where(user_id: user).any?
+  def add_users(users, access_level, current_user: nil, expires_at: nil)
+    GroupMember.add_users(
+      self,
+      users,
+      access_level,
+      current_user: current_user,
+      expires_at: expires_at
+    )
   end
 
+  def add_user(user, access_level, current_user: nil, expires_at: nil, ldap: false)
+    GroupMember.add_user(
+      self,
+      user,
+      access_level,
+      current_user: current_user,
+      expires_at: expires_at,
+      ldap: ldap
+    )
+  end
+
+  def add_guest(user, current_user = nil)
+    add_user(user, :guest, current_user: current_user)
+  end
+
+  def add_reporter(user, current_user = nil)
+    add_user(user, :reporter, current_user: current_user)
+  end
+
+  def add_developer(user, current_user = nil)
+    add_user(user, :developer, current_user: current_user)
+  end
+
+  def add_maintainer(user, current_user = nil)
+    add_user(user, :maintainer, current_user: current_user)
+  end
+
+  # @deprecated
+  alias_method :add_master, :add_maintainer
+
+  def add_owner(user, current_user = nil)
+    add_user(user, :owner, current_user: current_user)
+  end
+
+  def member?(user, min_access_level = Gitlab::Access::GUEST)
+    return false unless user
+
+    max_member_access_for_user(user) >= min_access_level
+  end
+
+  def has_owner?(user)
+    return false unless user
+
+    members_with_parents.owners.where(user_id: user).any?
+  end
+
+  def has_maintainer?(user)
+    return false unless user
+
+    members_with_parents.maintainers.where(user_id: user).any?
+  end
+
+  # @deprecated
+  alias_method :has_master?, :has_maintainer?
+
+  # Check if user is a last owner of the group.
+  # Parent owners are ignored for nested groups.
   def last_owner?(user)
-    has_owner?(user) && owners.size == 1
+    owners.include?(user) && owners.size == 1
   end
 
-  def avatar_type
-    unless self.avatar.image?
-      self.errors.add :avatar, "only images allowed"
-    end
+  def ldap_synced?
+    false
   end
 
   def post_create_hook
@@ -165,5 +238,164 @@ class Group < Namespace
 
   def system_hook_service
     SystemHooksService.new
+  end
+
+  def refresh_members_authorized_projects(blocking: true)
+    UserProjectAccessChangedService.new(user_ids_for_project_authorizations)
+      .execute(blocking: blocking)
+  end
+
+  def user_ids_for_project_authorizations
+    members_with_parents.pluck(:user_id)
+  end
+
+  def self_and_ancestors_ids
+    strong_memoize(:self_and_ancestors_ids) do
+      self_and_ancestors.pluck(:id)
+    end
+  end
+
+  def members_with_parents
+    # Avoids an unnecessary SELECT when the group has no parents
+    source_ids =
+      if parent_id
+        self_and_ancestors.reorder(nil).select(:id)
+      else
+        id
+      end
+
+    GroupMember
+      .active_without_invites_and_requests
+      .where(source_id: source_ids)
+  end
+
+  def members_with_descendants
+    GroupMember
+      .active_without_invites_and_requests
+      .where(source_id: self_and_descendants.reorder(nil).select(:id))
+  end
+
+  # Returns all members that are part of the group, it's subgroups, and ancestor groups
+  def direct_and_indirect_members
+    GroupMember
+      .active_without_invites_and_requests
+      .where(source_id: self_and_hierarchy.reorder(nil).select(:id))
+  end
+
+  def users_with_parents
+    User
+      .where(id: members_with_parents.select(:user_id))
+      .reorder(nil)
+  end
+
+  def users_with_descendants
+    User
+      .where(id: members_with_descendants.select(:user_id))
+      .reorder(nil)
+  end
+
+  # Returns all users that are members of the group because:
+  # 1. They belong to the group
+  # 2. They belong to a project that belongs to the group
+  # 3. They belong to a sub-group or project in such sub-group
+  # 4. They belong to an ancestor group
+  def direct_and_indirect_users
+    union = Gitlab::SQL::Union.new([
+      User
+        .where(id: direct_and_indirect_members.select(:user_id))
+        .reorder(nil),
+      project_users_with_descendants
+    ])
+
+    User.from("(#{union.to_sql}) #{User.table_name}")
+  end
+
+  # Returns all users that are members of projects
+  # belonging to the current group or sub-groups
+  def project_users_with_descendants
+    User
+      .joins(projects: :group)
+      .where(namespaces: { id: self_and_descendants.select(:id) })
+  end
+
+  def max_member_access_for_user(user)
+    return GroupMember::OWNER if user.admin?
+
+    members_with_parents
+      .where(user_id: user)
+      .reorder(access_level: :desc)
+      .first&.
+      access_level || GroupMember::NO_ACCESS
+  end
+
+  def mattermost_team_params
+    max_length = 59
+
+    {
+      name: path[0..max_length],
+      display_name: name[0..max_length],
+      type: public? ? 'O' : 'I' # Open vs Invite-only
+    }
+  end
+
+  def secret_variables_for(ref, project)
+    list_of_ids = [self] + ancestors
+    variables = Ci::GroupVariable.where(group: list_of_ids)
+    variables = variables.unprotected unless project.protected_for?(ref)
+    variables = variables.group_by(&:group_id)
+    list_of_ids.reverse.map { |group| variables[group.id] }.compact.flatten
+  end
+
+  def group_member(user)
+    if group_members.loaded?
+      group_members.find { |gm| gm.user_id == user.id }
+    else
+      group_members.find_by(user_id: user)
+    end
+  end
+
+  def hashed_storage?(_feature)
+    false
+  end
+
+  def refresh_project_authorizations
+    refresh_members_authorized_projects(blocking: false)
+  end
+
+  # each existing group needs to have a `runners_token`.
+  # we do this on read since migrating all existing groups is not a feasible
+  # solution.
+  def runners_token
+    ensure_runners_token!
+  end
+
+  private
+
+  def update_two_factor_requirement
+    return unless require_two_factor_authentication_changed? || two_factor_grace_period_changed?
+
+    users.find_each(&:update_two_factor_requirement)
+  end
+
+  def path_changed_hook
+    system_hook_service.execute_hooks_for(self, :rename)
+  end
+
+  def visibility_level_allowed_by_parent
+    return if visibility_level_allowed_by_parent?
+
+    errors.add(:visibility_level, "#{visibility} is not allowed since the parent group has a #{parent.visibility} visibility.")
+  end
+
+  def visibility_level_allowed_by_projects
+    return if visibility_level_allowed_by_projects?
+
+    errors.add(:visibility_level, "#{visibility} is not allowed since this group contains projects with higher visibility.")
+  end
+
+  def visibility_level_allowed_by_sub_groups
+    return if visibility_level_allowed_by_sub_groups?
+
+    errors.add(:visibility_level, "#{visibility} is not allowed since there are sub-groups with higher visibility.")
   end
 end

@@ -1,4 +1,13 @@
 class SnippetsController < ApplicationController
+  include RendersNotes
+  include ToggleAwardEmoji
+  include SpammableActions
+  include SnippetsActions
+  include RendersBlob
+  include PreviewMarkdown
+
+  skip_before_action :verify_authenticity_token, only: [:show], if: :js_request?
+
   before_action :snippet, only: [:show, :edit, :destroy, :update, :raw]
 
   # Allow read snippet
@@ -10,7 +19,7 @@ class SnippetsController < ApplicationController
   # Allow destroy snippet
   before_action :authorize_admin_snippet!, only: [:destroy]
 
-  skip_before_action :authenticate_user!, only: [:index, :user_index, :show, :raw]
+  skip_before_action :authenticate_user!, only: [:index, :show, :raw]
 
   layout 'snippets'
   respond_to :html
@@ -19,13 +28,10 @@ class SnippetsController < ApplicationController
     if params[:username].present?
       @user = User.find_by(username: params[:username])
 
-      render_404 and return unless @user
+      return render_404 unless @user
 
-      @snippets = SnippetsFinder.new.execute(current_user, {
-        filter: :by_user,
-        user: @user,
-        scope: params[:scope] }).
-      page(params[:page])
+      @snippets = SnippetsFinder.new(current_user, author: @user, scope: params[:scope])
+        .execute.page(params[:page])
 
       render 'index'
     else
@@ -38,22 +44,44 @@ class SnippetsController < ApplicationController
   end
 
   def create
-    @snippet = CreateSnippetService.new(nil, current_user,
-                                        snippet_params).execute
+    create_params = snippet_params.merge(spammable_params)
 
-    respond_with @snippet.becomes(Snippet)
-  end
+    @snippet = CreateSnippetService.new(nil, current_user, create_params).execute
 
-  def edit
+    move_temporary_files if @snippet.valid? && params[:files]
+
+    recaptcha_check_with_fallback { render :new }
   end
 
   def update
-    UpdateSnippetService.new(nil, current_user, @snippet,
-                             snippet_params).execute
-    respond_with @snippet.becomes(Snippet)
+    update_params = snippet_params.merge(spammable_params)
+
+    UpdateSnippetService.new(nil, current_user, @snippet, update_params).execute
+
+    recaptcha_check_with_fallback { render :edit }
   end
 
   def show
+    blob = @snippet.blob
+    conditionally_expand_blob(blob)
+
+    @note = Note.new(noteable: @snippet)
+    @noteable = @snippet
+
+    @discussions = @snippet.discussions
+    @notes = prepare_notes_for_rendering(@discussions.flat_map(&:notes), @noteable)
+
+    respond_to do |format|
+      format.html do
+        render 'show'
+      end
+
+      format.json do
+        render_blob_json(blob)
+      end
+
+      format.js { render 'shared/snippets/show' }
+    end
   end
 
   def destroy
@@ -61,33 +89,30 @@ class SnippetsController < ApplicationController
 
     @snippet.destroy
 
-    redirect_to snippets_path
-  end
-
-  def raw
-    send_data(
-      @snippet.content,
-      type: 'text/plain; charset=utf-8',
-      disposition: 'inline',
-      filename: @snippet.sanitized_file_name
-    )
+    redirect_to snippets_path, status: :found
   end
 
   protected
 
   def snippet
-    @snippet ||= if current_user
-                   PersonalSnippet.where("author_id = ? OR visibility_level IN (?)",
-                     current_user.id,
-                     [Snippet::PUBLIC, Snippet::INTERNAL]).
-                     find(params[:id])
-                 else
-                   PersonalSnippet.find(params[:id])
-                 end
+    @snippet ||= PersonalSnippet.inc_relations_for_view.find_by(id: params[:id])
+  end
+
+  alias_method :awardable, :snippet
+  alias_method :spammable, :snippet
+
+  def spammable_path
+    snippet_path(@snippet)
   end
 
   def authorize_read_snippet!
-    authenticate_user! unless can?(current_user, :read_personal_snippet, @snippet)
+    return if can?(current_user, :read_personal_snippet, @snippet)
+
+    if current_user
+      render_404
+    else
+      authenticate_user!
+    end
   end
 
   def authorize_update_snippet!
@@ -99,6 +124,12 @@ class SnippetsController < ApplicationController
   end
 
   def snippet_params
-    params.require(:personal_snippet).permit(:title, :content, :file_name, :private, :visibility_level)
+    params.require(:personal_snippet).permit(:title, :content, :file_name, :private, :visibility_level, :description)
+  end
+
+  def move_temporary_files
+    params[:files].each do |file|
+      FileMover.new(file, @snippet).execute
+    end
   end
 end

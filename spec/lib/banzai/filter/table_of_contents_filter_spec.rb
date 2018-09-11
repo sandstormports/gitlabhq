@@ -1,8 +1,6 @@
-# encoding: UTF-8
-
 require 'spec_helper'
 
-describe Banzai::Filter::TableOfContentsFilter, lib: true do
+describe Banzai::Filter::TableOfContentsFilter do
   include FilterSpecHelper
 
   def header(level, text)
@@ -24,7 +22,7 @@ describe Banzai::Filter::TableOfContentsFilter, lib: true do
       html = header(i, "Header #{i}")
       doc = filter(html)
 
-      expect(doc.css("h#{i} a").first.attr('id')).to eq "header-#{i}"
+      expect(doc.css("h#{i} a").first.attr('id')).to eq "user-content-header-#{i}"
     end
   end
 
@@ -34,7 +32,12 @@ describe Banzai::Filter::TableOfContentsFilter, lib: true do
       expect(doc.css('h1 a').first.attr('class')).to eq 'anchor'
     end
 
-    it 'links to the id' do
+    it 'has a namespaced id' do
+      doc = filter(header(1, 'Header'))
+      expect(doc.css('h1 a').first.attr('id')).to eq 'user-content-header'
+    end
+
+    it 'links to the non-namespaced id' do
       doc = filter(header(1, 'Header'))
       expect(doc.css('h1 a').first.attr('href')).to eq '#header'
     end
@@ -42,29 +45,36 @@ describe Banzai::Filter::TableOfContentsFilter, lib: true do
     describe 'generated IDs' do
       it 'translates spaces to dashes' do
         doc = filter(header(1, 'This header has spaces in it'))
-        expect(doc.css('h1 a').first.attr('id')).to eq 'this-header-has-spaces-in-it'
+        expect(doc.css('h1 a').first.attr('href')).to eq '#this-header-has-spaces-in-it'
       end
 
       it 'squeezes multiple spaces and dashes' do
         doc = filter(header(1, 'This---header     is poorly-formatted'))
-        expect(doc.css('h1 a').first.attr('id')).to eq 'this-header-is-poorly-formatted'
+        expect(doc.css('h1 a').first.attr('href')).to eq '#this-header-is-poorly-formatted'
       end
 
       it 'removes punctuation' do
         doc = filter(header(1, "This, header! is, filled. with @ punctuation?"))
-        expect(doc.css('h1 a').first.attr('id')).to eq 'this-header-is-filled-with-punctuation'
+        expect(doc.css('h1 a').first.attr('href')).to eq '#this-header-is-filled-with-punctuation'
       end
 
       it 'appends a unique number to duplicates' do
         doc = filter(header(1, 'One') + header(2, 'One'))
 
-        expect(doc.css('h1 a').first.attr('id')).to eq 'one'
-        expect(doc.css('h2 a').first.attr('id')).to eq 'one-1'
+        expect(doc.css('h1 a').first.attr('href')).to eq '#one'
+        expect(doc.css('h2 a').first.attr('href')).to eq '#one-1'
+      end
+
+      it 'prepends a prefix to digits-only ids' do
+        doc = filter(header(1, "123") + header(2, "1.0"))
+
+        expect(doc.css('h1 a').first.attr('href')).to eq '#anchor-123'
+        expect(doc.css('h2 a').first.attr('href')).to eq '#anchor-10'
       end
 
       it 'supports Unicode' do
         doc = filter(header(1, '한글'))
-        expect(doc.css('h1 a').first.attr('id')).to eq '한글'
+        expect(doc.css('h1 a').first.attr('id')).to eq 'user-content-한글'
         expect(doc.css('h1 a').first.attr('href')).to eq '#한글'
       end
     end
@@ -92,6 +102,51 @@ describe Banzai::Filter::TableOfContentsFilter, lib: true do
       expect(links.first.text).to eq 'Header 1'
       expect(links.last.attr('href')).to eq '#header-2'
       expect(links.last.text).to eq 'Header 2'
+    end
+
+    context 'table of contents nesting' do
+      let(:results) do
+        result(
+          header(1, 'Header 1') <<
+          header(2, 'Header 1-1') <<
+          header(3, 'Header 1-1-1') <<
+          header(2, 'Header 1-2') <<
+          header(1, 'Header 2') <<
+          header(2, 'Header 2-1')
+        )
+      end
+
+      it 'keeps list levels regarding header levels' do
+        items = doc.css('li')
+
+        # Header 1
+        expect(items[0].ancestors).to satisfy_none { |node| node.name == 'li' }
+
+        # Header 1-1
+        expect(items[1].ancestors).to include(items[0])
+
+        # Header 1-1-1
+        expect(items[2].ancestors).to include(items[0], items[1])
+
+        # Header 1-2
+        expect(items[3].ancestors).to include(items[0])
+        expect(items[3].ancestors).not_to include(items[1])
+
+        # Header 2
+        expect(items[4].ancestors).to satisfy_none { |node| node.name == 'li' }
+
+        # Header 2-1
+        expect(items[5].ancestors).to include(items[4])
+      end
+    end
+
+    context 'header text contains escaped content' do
+      let(:content) { '&lt;img src="x" onerror="alert(42)"&gt;' }
+      let(:results) { result(header(1, content)) }
+
+      it 'outputs escaped content' do
+        expect(doc.inner_html).to include(content)
+      end
     end
   end
 end

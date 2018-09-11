@@ -9,40 +9,62 @@ class ProfilesController < Profiles::ApplicationController
   end
 
   def update
-    user_params.except!(:email) if @user.ldap_user?
-
     respond_to do |format|
-      if @user.update_attributes(user_params)
+      result = Users::UpdateService.new(current_user, user_params.merge(user: @user)).execute
+
+      if result[:status] == :success
         message = "Profile was successfully updated"
+
         format.html { redirect_back_or_default(default: { action: 'show' }, options: { notice: message }) }
         format.json { render json: { message: message } }
       else
-        message = @user.errors.full_messages.uniq.join('. ')
-        format.html { redirect_back_or_default(default: { action: 'show' }, options: { alert: "Failed to update profile. #{message}" }) }
-        format.json { render json: { message: message }, status: :unprocessable_entity }
+        format.html { redirect_back_or_default(default: { action: 'show' }, options: { alert: result[:message] }) }
+        format.json { render json: result }
       end
     end
   end
 
-  def reset_private_token
-    if current_user.reset_authentication_token!
-      flash[:notice] = "Token was successfully updated"
+  def reset_incoming_email_token
+    Users::UpdateService.new(current_user, user: @user).execute! do |user|
+      user.reset_incoming_email_token!
     end
 
-    redirect_to profile_account_path
+    flash[:notice] = "Incoming email token was successfully reset"
+
+    redirect_to profile_personal_access_tokens_path
+  end
+
+  def reset_feed_token
+    Users::UpdateService.new(current_user, user: @user).execute! do |user|
+      user.reset_feed_token!
+    end
+
+    flash[:notice] = 'Feed token was successfully reset'
+
+    redirect_to profile_personal_access_tokens_path
   end
 
   def audit_log
-    @events = AuditEvent.where(entity_type: "User", entity_id: current_user.id).
-      order("created_at DESC").
-      page(params[:page])
+    @events = AuditEvent.where(entity_type: "User", entity_id: current_user.id)
+      .order("created_at DESC")
+      .page(params[:page])
   end
 
   def update_username
-    @user.update_attributes(username: user_params[:username])
+    result = Users::UpdateService.new(current_user, user: @user, username: username_param).execute
 
     respond_to do |format|
-      format.js
+      if result[:status] == :success
+        message = s_("Profiles|Username successfully changed")
+
+        format.html { redirect_back_or_default(default: { action: 'show' }, options: { notice: message }) }
+        format.json { render json: { message: message }, status: :ok }
+      else
+        message = s_("Profiles|Username change failed - %{message}") % { message: result[:message] }
+
+        format.html { redirect_back_or_default(default: { action: 'show' }, options: { alert: message }) }
+        format.json { render json: { message: message }, status: :unprocessable_entity }
+      end
     end
   end
 
@@ -56,8 +78,12 @@ class ProfilesController < Profiles::ApplicationController
     return render_404 unless @user.can_change_username?
   end
 
+  def username_param
+    @username_param ||= user_params.require(:username)
+  end
+
   def user_params
-    params.require(:user).permit(
+    @user_params ||= params.require(:user).permit(
       :avatar,
       :bio,
       :email,
@@ -67,13 +93,15 @@ class ProfilesController < Profiles::ApplicationController
       :linkedin,
       :location,
       :name,
-      :password,
-      :password_confirmation,
       :public_email,
       :skype,
       :twitter,
       :username,
-      :website_url
+      :website_url,
+      :organization,
+      :preferred_language,
+      :private_profile,
+      status: [:emoji, :message]
     )
   end
 end

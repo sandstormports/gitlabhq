@@ -5,26 +5,46 @@
 #
 module Gitlab
   module ImportSources
-    extend CurrentSettings
+    ImportSource = Struct.new(:name, :title, :importer)
+
+    # We exclude `bare_repository` here as it has no import class associated
+    ImportTable = [
+      ImportSource.new('github',           'GitHub',           Gitlab::GithubImport::ParallelImporter),
+      ImportSource.new('bitbucket',        'Bitbucket Cloud',  Gitlab::BitbucketImport::Importer),
+      ImportSource.new('bitbucket_server', 'Bitbucket Server', Gitlab::BitbucketServerImport::Importer),
+      ImportSource.new('gitlab',           'GitLab.com',       Gitlab::GitlabImport::Importer),
+      ImportSource.new('google_code',      'Google Code',      Gitlab::GoogleCodeImport::Importer),
+      ImportSource.new('fogbugz',          'FogBugz',          Gitlab::FogbugzImport::Importer),
+      ImportSource.new('git',              'Repo by URL',      nil),
+      ImportSource.new('gitlab_project',   'GitLab export',    Gitlab::ImportExport::Importer),
+      ImportSource.new('gitea',            'Gitea',            Gitlab::LegacyGithubImport::Importer),
+      ImportSource.new('manifest',         'Manifest file',    nil)
+    ].freeze
 
     class << self
-      def values
-        options.values
-      end
-
       def options
-        {
-          'GitHub'          => 'github',
-          'Bitbucket'       => 'bitbucket',
-          'GitLab.com'      => 'gitlab',
-          'Gitorious.org'   => 'gitorious',
-          'Google Code'     => 'google_code',
-          'FogBugz'         => 'fogbugz',
-          'Any repo by URL' => 'git',
-        }
+        Hash[import_table.map { |importer| [importer.title, importer.name] }]
       end
 
-    end
+      def values
+        import_table.map(&:name)
+      end
 
+      def importer_names
+        import_table.select(&:importer).map(&:name)
+      end
+
+      def importer(name)
+        import_table.find { |import_source| import_source.name == name }.importer
+      end
+
+      def title(name)
+        options.key(name)
+      end
+
+      def import_table
+        ImportTable
+      end
+    end
   end
 end

@@ -3,24 +3,14 @@
   .suppressed-container
     %a.show-suppressed-diff.js-show-suppressed-diff Changes suppressed. Click to show.
 
-%table.text-file.code.js-syntax-highlight{ class: too_big ? 'hide' : '' }
+%table.text-file.diff-wrap-lines.code.js-syntax-highlight{ data: diff_view_data, class: too_big ? 'hide' : '' }
+  = render partial: "projects/diffs/line",
+    collection: diff_file.highlighted_diff_lines,
+    as: :line,
+    locals: { diff_file: diff_file, discussions: @grouped_diff_discussions }
 
-  - last_line = 0
-  - raw_diff_lines = diff_file.diff_lines.to_a
-  - diff_file.highlighted_diff_lines.each_with_index do |line, index|
-    - line_code = generate_line_code(diff_file.file_path, line)
-    - last_line = line.new_pos
-    = render "projects/diffs/line", {line: line, diff_file: diff_file, line_code: line_code}
-
-    - if @reply_allowed
-      - comments = @line_notes.select { |n| n.line_code == line_code && n.active? }.sort_by(&:created_at)
-      - unless comments.empty?
-        = render "projects/notes/diff_notes_with_reply", notes: comments, line: raw_diff_lines[index].text
-
-  - if last_line > 0
-    = render "projects/diffs/match_line", { line: "",
-      line_old: last_line, line_new: last_line, bottom: true, new_file: diff_file.new_file }
-
-- if diff_file.diff.blank? && diff_file.mode_changed?
-  .file-mode-changed
-    File mode changed
+  - if !diff_file.new_file? && !diff_file.deleted_file? && diff_file.highlighted_diff_lines.any?
+    - last_line = diff_file.highlighted_diff_lines.last
+    - if last_line.new_pos < total_lines
+      %tr.line_holder
+        = diff_match_line last_line.old_pos, last_line.new_pos, bottom: true

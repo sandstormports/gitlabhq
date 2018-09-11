@@ -1,33 +1,32 @@
+# frozen_string_literal: true
+
 require 'uri'
-require 'addressable/uri'
 
 module Banzai
   module Filter
-    # HTML filter that "fixes" relative links to files in a repository.
+    # HTML filter that "fixes" relative links to uploads or files in a repository.
     #
     # Context options:
     #   :commit
+    #   :group
     #   :project
     #   :project_wiki
     #   :ref
     #   :requested_path
     class RelativeLinkFilter < HTML::Pipeline::Filter
-      def call
-        # sandstorm: always use this filter because it also fixes up 'should-use-relative-url-here'
-        # links.
+      include Gitlab::Utils::StrongMemoize
 
-        #return doc unless linkable_files?
+      def call
+        @uri_types = {}
+        clear_memoization(:linkable_files)
 
         doc.search('a:not(.gfm)').each do |el|
           process_link_attr el.attribute('href')
         end
 
-        doc.search('img').each do |el|
+        doc.css('img, video').each do |el|
           process_link_attr el.attribute('src')
-        end
-
-        doc.search('a:not(.gfm)').each do |el|
-          sandstorm_external_links el
+          process_link_attr el.attribute('data-src')
         end
 
         doc
@@ -35,48 +34,69 @@ module Banzai
 
       protected
 
-      def sandstorm_external_links(el)
-        uri = URI(el.attribute('href').value)
-        if !uri.relative?
-          el.set_attribute('target', '_blank')
-        end
-      rescue URI::Error
-        # noop
-      end
-
       def linkable_files?
-        context[:project_wiki].nil? && repository.try(:exists?) && !repository.empty?
+        strong_memoize(:linkable_files) do
+          context[:project_wiki].nil? && repository.try(:exists?) && !repository.empty?
+        end
       end
 
       def process_link_attr(html_attr)
         return if html_attr.blank?
+        return if html_attr.value.start_with?('//')
 
-        uri = URI(html_attr.value)
-        if linkable_files? && uri.relative? && uri.path.present?
-          html_attr.value = rebuild_relative_uri(uri).to_s
-        elsif uri.host == "should-use-relative-url-here"
-          html_attr.value = uri.path
+        if html_attr.value.start_with?('/uploads/')
+          process_link_to_upload_attr(html_attr)
+        elsif linkable_files?
+          process_link_to_repository_attr(html_attr)
         end
-      rescue URI::Error
+      end
+
+      def process_link_to_upload_attr(html_attr)
+        path_parts = [Addressable::URI.unescape(html_attr.value)]
+
+        if group
+          path_parts.unshift(relative_url_root, 'groups', group.full_path, '-')
+        elsif project
+          path_parts.unshift(relative_url_root, project.full_path)
+        end
+
+        path = Addressable::URI.escape(File.join(*path_parts))
+
+        html_attr.value =
+          if context[:only_path]
+            path
+          else
+            Addressable::URI.join(Gitlab.config.gitlab.base_url, path).to_s
+          end
+      end
+
+      def process_link_to_repository_attr(html_attr)
+        uri = URI(html_attr.value)
+        if uri.relative? && uri.path.present?
+          html_attr.value = rebuild_relative_uri(uri).to_s
+        end
+      rescue URI::Error, Addressable::URI::InvalidURIError
         # noop
       end
 
       def rebuild_relative_uri(uri)
-        file_path = relative_file_path(uri.path)
+        file_path = relative_file_path(uri)
 
         uri.path = [
           relative_url_root,
-          context[:project].path_with_namespace,
-          path_type(file_path),
-          ref || context[:project].default_branch,  # if no ref exists, point to the default branch
-          file_path
+          project.full_path,
+          uri_type(file_path),
+          Addressable::URI.escape(ref).gsub('#', '%23'),
+          Addressable::URI.escape(file_path)
         ].compact.join('/').squeeze('/').chomp('/')
 
         uri
       end
 
-      def relative_file_path(path)
-        nested_path = build_relative_path(path, context[:requested_path])
+      def relative_file_path(uri)
+        path = Addressable::URI.unescape(uri.path)
+        request_path = Addressable::URI.unescape(context[:requested_path])
+        nested_path = build_relative_path(path, request_path)
         file_exists?(nested_path) ? nested_path : path
       end
 
@@ -104,9 +124,12 @@ module Banzai
       def build_relative_path(path, request_path)
         return request_path if path.empty?
         return path unless request_path
+        return path[1..-1] if path.start_with?('/')
 
         parts = request_path.split('/')
-        parts.pop if path_type(request_path) != 'tree'
+        parts.pop if uri_type(request_path) != :tree
+
+        path.sub!(%r{\A\./}, '')
 
         while path.start_with?('../')
           parts.pop
@@ -117,45 +140,15 @@ module Banzai
       end
 
       def file_exists?(path)
-        return false if path.nil?
-        repository.blob_at(current_sha, path).present? ||
-          repository.tree(current_sha, path).entries.any?
+        path.present? && !!uri_type(path)
       end
 
-      # Get the type of the given path
-      #
-      # path - String path to check
-      #
-      # Examples:
-      #
-      #   path_type('doc/README.md') # => 'blob'
-      #   path_type('doc/logo.png')  # => 'raw'
-      #   path_type('doc/api')       # => 'tree'
-      #
-      # Returns a String
-      def path_type(path)
-        unescaped_path = Addressable::URI.unescape(path)
-
-        if tree?(unescaped_path)
-          'tree'
-        elsif image?(unescaped_path)
-          'raw'
-        else
-          'blob'
-        end
+      def uri_type(path)
+        @uri_types[path] ||= current_commit.uri_type(path)
       end
 
-      def tree?(path)
-        repository.tree(current_sha, path).entries.any?
-      end
-
-      def image?(path)
-        repository.blob_at(current_sha, path).try(:image?)
-      end
-
-      def current_sha
-        context[:commit].try(:id) ||
-          ref ? repository.commit(ref).try(:sha) : repository.head_commit.sha
+      def current_commit
+        @current_commit ||= context[:commit] || repository.commit(ref)
       end
 
       def relative_url_root
@@ -163,11 +156,19 @@ module Banzai
       end
 
       def ref
-        context[:ref]
+        context[:ref] || project.default_branch
+      end
+
+      def group
+        context[:group]
+      end
+
+      def project
+        context[:project]
       end
 
       def repository
-        context[:project].try(:repository)
+        @repository ||= project&.repository
       end
     end
   end

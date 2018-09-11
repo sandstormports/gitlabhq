@@ -1,3 +1,4 @@
+# rubocop:disable all
 # Loops through old importer projects that kept a token/password in the import URL
 # and encrypts the credentials into a separate field in project#import_data
 # #down method not supported
@@ -6,7 +7,13 @@ class RemoveWrongImportUrlFromProjects < ActiveRecord::Migration
   class ProjectImportDataFake
     extend AttrEncrypted
     attr_accessor :credentials
-    attr_encrypted :credentials, key: Gitlab::Application.secrets.db_key_base, marshal: true, encode: true, :mode => :per_attribute_iv_and_salt
+    attr_encrypted :credentials,
+                   key: Settings.attr_encrypted_db_key_base,
+                   marshal: true,
+                   encode: true,
+                   :mode => :per_attribute_iv_and_salt,
+                   insecure_mode: true,
+                   algorithm: 'aes-256-cbc'
   end
 
   def up
@@ -24,11 +31,11 @@ class RemoveWrongImportUrlFromProjects < ActiveRecord::Migration
   def process_projects_with_wrong_url
     projects_with_wrong_import_url.each do |project|
       begin
-        import_url = Gitlab::ImportUrl.new(project["import_url"])
+        import_url = Gitlab::UrlSanitizer.new(project["import_url"])
 
         update_import_url(import_url, project)
         update_import_data(import_url, project)
-      rescue URI::InvalidURIError
+      rescue Addressable::URI::InvalidURIError
         nullify_import_url(project)
       end
     end

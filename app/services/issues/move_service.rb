@@ -1,6 +1,8 @@
+# frozen_string_literal: true
+
 module Issues
   class MoveService < Issues::BaseService
-    class MoveError < StandardError; end
+    MoveError = Class.new(StandardError)
 
     def execute(issue, new_project)
       @old_issue = issue
@@ -19,18 +21,10 @@ module Issues
       # on rewriting notes (unfolding references)
       #
       ActiveRecord::Base.transaction do
-        # New issue tasks
-        #
         @new_issue = create_new_issue
 
-        rewrite_notes
-        add_note_moved_from
-
-        # Old issue tasks
-        #
-        add_note_moved_to
-        close_issue
-        mark_as_moved
+        update_new_issue
+        update_old_issue
       end
 
       notify_participants
@@ -40,17 +34,56 @@ module Issues
 
     private
 
-    def create_new_issue
-      new_params = { id: nil, iid: nil, label_ids: [], milestone: nil,
-                     project: @new_project, author: @old_issue.author,
-                     description: rewrite_content(@old_issue.description) }
+    def update_new_issue
+      rewrite_notes
+      rewrite_issue_award_emoji
+      add_note_moved_from
+    end
 
-      new_params = @old_issue.serializable_hash.merge(new_params)
+    def update_old_issue
+      add_note_moved_to
+      close_issue
+      mark_as_moved
+    end
+
+    def create_new_issue
+      new_params = { id: nil, iid: nil, label_ids: cloneable_label_ids,
+                     milestone_id: cloneable_milestone_id,
+                     project: @new_project, author: @old_issue.author,
+                     description: rewrite_content(@old_issue.description),
+                     assignee_ids: @old_issue.assignee_ids }
+
+      new_params = @old_issue.serializable_hash.symbolize_keys.merge(new_params)
       CreateService.new(@new_project, @current_user, new_params).execute
     end
 
+    def cloneable_label_ids
+      params = {
+        project_id: @new_project.id,
+        title: @old_issue.labels.pluck(:title),
+        include_ancestor_groups: true
+      }
+
+      LabelsFinder.new(current_user, params).execute.pluck(:id)
+    end
+
+    def cloneable_milestone_id
+      title = @old_issue.milestone&.title
+      return unless title
+
+      if @new_project.group && can?(current_user, :read_group, @new_project.group)
+        group_id = @new_project.group.id
+      end
+
+      params =
+        { title: title, project_ids: @new_project.id, group_ids: group_id }
+
+      milestones = MilestonesFinder.new(params).execute
+      milestones.first&.id
+    end
+
     def rewrite_notes
-      @old_issue.notes.find_each do |note|
+      @old_issue.notes_with_associations.find_each do |note|
         new_note = note.dup
         new_params = { project: @new_project, noteable: @new_issue,
                        note: rewrite_content(new_note.note),
@@ -58,6 +91,20 @@ module Issues
                        updated_at: note.updated_at }
 
         new_note.update(new_params)
+
+        rewrite_award_emoji(note, new_note)
+      end
+    end
+
+    def rewrite_issue_award_emoji
+      rewrite_award_emoji(@old_issue, @new_issue)
+    end
+
+    def rewrite_award_emoji(old_awardable, new_awardable)
+      old_awardable.award_emoji.each do |award|
+        new_award = award.dup
+        new_award.awardable = new_awardable
+        new_award.save
       end
     end
 
@@ -95,7 +142,7 @@ module Issues
     end
 
     def notify_participants
-      notification_service.issue_moved(@old_issue, @new_issue, @current_user)
+      notification_service.async.issue_moved(@old_issue, @new_issue, @current_user)
     end
   end
 end

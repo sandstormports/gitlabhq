@@ -1,18 +1,18 @@
 - page_title "Emails"
-- header_title page_title, profile_emails_path
+- @content_class = "limit-container-width" unless fluid_layout
 
 .row.prepend-top-default
-  .col-lg-3.profile-settings-sidebar
+  .col-lg-4.profile-settings-sidebar
     %h4.prepend-top-0
       = page_title
     %p
       Control emails linked to your account
-  .col-lg-9
+  .col-lg-8
     %h4.prepend-top-0
       Add email address
     = form_for 'email', url: profile_emails_path do |f|
       .form-group
-        = f.label :email, class: 'label-light'
+        = f.label :email, class: 'label-bold'
         = f.text_field :email, class: 'form-control'
       .prepend-top-default
         = f.submit 'Add email address', class: 'btn btn-create'
@@ -29,21 +29,27 @@
           Your Public Email will be displayed on your public profile.
         %li
           All email addresses will be used to identify your commits.
-    %ul.well-list
+    %ul.content-list
       %li
-        = @primary
-        %span.pull-right
-          %span.label.label-success Primary Email
-          - if @primary === current_user.public_email
-            %span.label.label-info Public Email
-          - if @primary === current_user.notification_email
-            %span.label.label-info Notification Email
+        = render partial: 'shared/email_with_badge', locals: { email: @primary_email, verified: current_user.confirmed? }
+        %span.float-right
+          %span.badge.badge-success Primary email
+          - if @primary_email === current_user.public_email
+            %span.badge.badge-info Public email
+          - if @primary_email === current_user.notification_email
+            %span.badge.badge-info Notification email
       - @emails.each do |email|
         %li
-          = email.email
-          %span.pull-right
+          = render partial: 'shared/email_with_badge', locals: { email: email.email, verified: email.confirmed? }
+          %span.float-right
             - if email.email === current_user.public_email
-              %span.label.label-info Public Email
+              %span.badge.badge-info Public email
             - if email.email === current_user.notification_email
-              %span.label.label-info Notification Email
-            = link_to 'Remove', profile_email_path(email), data: { confirm: 'Are you sure?'}, method: :delete, class: 'btn btn-sm btn-warning prepend-left-10'
+              %span.badge.badge-info Notification email
+            - unless email.confirmed?
+              - confirm_title = "#{email.confirmation_sent_at ? 'Resend' : 'Send'} confirmation email"
+              = link_to confirm_title, resend_confirmation_instructions_profile_email_path(email), method: :put, class: 'btn btn-sm btn-warning prepend-left-10'
+
+            = link_to profile_email_path(email), data: { confirm: 'Are you sure?'}, method: :delete, class: 'btn btn-sm btn-danger prepend-left-10' do
+              %span.sr-only Remove
+              = icon('trash')

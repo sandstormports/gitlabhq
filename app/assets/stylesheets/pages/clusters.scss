@@ -1,0 +1,54 @@
+.edit-cluster-form {
+  .clipboard-addon {
+    background-color: $white-light;
+  }
+}
+
+.cluster-applications-table {
+  // Wait for the Vue to kick-in and render the applications block
+  min-height: 628px;
+}
+
+.clusters-dropdown-menu {
+  max-width: 100%;
+}
+
+.clusters-error-alert {
+  width: 100%;
+}
+
+.clusters-container {
+  .nav-bar-right {
+    padding: $gl-padding-top $gl-padding;
+  }
+
+  .empty-state .svg-content img {
+    width: 145px;
+  }
+
+  .top-area .nav-controls > .btn.btn-add-cluster {
+    margin-right: 0;
+  }
+}
+
+.gcp-signup-offer {
+  border-left-color: $blue-500;
+
+  svg {
+    fill: $blue-500;
+    vertical-align: middle;
+  }
+
+  .gcp-signup-offer--content {
+    display: flex;
+
+    h4 {
+      font-size: 16px;
+      line-height: 24px;
+    }
+
+    .gcp-signup-offer--icon {
+      align-self: flex-start;
+    }
+  }
+}

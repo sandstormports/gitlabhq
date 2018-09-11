@@ -1,17 +1,15 @@
-class ProjectDestroyWorker
-  include Sidekiq::Worker
+# frozen_string_literal: true
 
-  sidekiq_options queue: :default
+class ProjectDestroyWorker
+  include ApplicationWorker
+  include ExceptionBacktrace
 
   def perform(project_id, user_id, params)
-    begin
-      project = Project.unscoped.find(project_id)
-    rescue ActiveRecord::RecordNotFound
-      return
-    end
-
+    project = Project.find(project_id)
     user = User.find(user_id)
 
-    ::Projects::DestroyService.new(project, user, params).execute
+    ::Projects::DestroyService.new(project, user, params.symbolize_keys).execute
+  rescue ActiveRecord::RecordNotFound => error
+    logger.error("Failed to delete project (#{project_id}): #{error.message}")
   end
 end

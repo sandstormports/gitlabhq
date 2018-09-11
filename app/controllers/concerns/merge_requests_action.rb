@@ -1,11 +1,23 @@
 module MergeRequestsAction
   extend ActiveSupport::Concern
+  include IssuableCollections
 
+  # rubocop:disable Gitlab/ModuleWithInstanceVariables
   def merge_requests
-    @merge_requests = get_merge_requests_collection.non_archived
-    @merge_requests = @merge_requests.page(params[:page])
-    @merge_requests = @merge_requests.preload(:author, :target_project)
+    @merge_requests = issuables_collection.page(params[:page])
 
-    @label = @issuable_finder.labels.first
+    @issuable_meta_data = issuable_meta_data(@merge_requests, collection_type)
+  end
+  # rubocop:enable Gitlab/ModuleWithInstanceVariables
+
+  private
+
+  def finder_type
+    (super if defined?(super)) ||
+      (MergeRequestsFinder if action_name == 'merge_requests')
+  end
+
+  def filter_params
+    super.merge(non_archived: true)
   end
 end

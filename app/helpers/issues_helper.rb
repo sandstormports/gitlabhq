@@ -13,46 +13,14 @@ module IssuesHelper
     OpenStruct.new(id: 0, title: 'None (backlog)', name: 'Unassigned')
   end
 
-  def url_for_project_issues(project = @project, options = {})
-    return '' if project.nil?
-
-    url =
-      if options[:only_path]
-        project.issues_tracker.project_path
-      else
-        project.issues_tracker.project_url
-      end
-
-    # Ensure we return a valid URL to prevent possible XSS.
-    URI.parse(url).to_s
-  rescue URI::InvalidURIError
-    ''
-  end
-
-  def url_for_new_issue(project = @project, options = {})
-    return '' if project.nil?
-
-    url =
-      if options[:only_path]
-        project.issues_tracker.new_issue_path
-      else
-        project.issues_tracker.new_issue_url
-      end
-
-    # Ensure we return a valid URL to prevent possible XSS.
-    URI.parse(url).to_s
-  rescue URI::InvalidURIError
-    ''
-  end
-
   def url_for_issue(issue_iid, project = @project, options = {})
     return '' if project.nil?
 
     url =
-      if options[:only_path]
-        project.issues_tracker.issue_path(issue_iid)
+      if options[:internal]
+        url_for_internal_issue(issue_iid, project, options)
       else
-        project.issues_tracker.issue_url(issue_iid)
+        url_for_tracker_issue(issue_iid, project, options)
       end
 
     # Ensure we return a valid URL to prevent possible XSS.
@@ -61,41 +29,33 @@ module IssuesHelper
     ''
   end
 
-  def bulk_update_milestone_options
-    milestones = @project.milestones.active.reorder(due_date: :asc, title: :asc).to_a
-    milestones.unshift(Milestone::None)
-
-    options_from_collection_for_select(milestones, 'id', 'title', params[:milestone_id])
-  end
-
-  def milestone_options(object)
-    milestones = object.project.milestones.active.reorder(due_date: :asc, title: :asc).to_a
-    milestones.unshift(object.milestone) if object.milestone.present? && object.milestone.closed?
-    milestones.unshift(Milestone::None)
-
-    options_from_collection_for_select(milestones, 'id', 'title', object.milestone_id)
-  end
-
-  def project_options(issuable, current_user, ability: :read_project)
-    projects = current_user.authorized_projects
-    projects = projects.select do |project|
-      current_user.can?(ability, project)
+  def url_for_tracker_issue(issue_iid, project, options)
+    if options[:only_path]
+      project.issues_tracker.issue_path(issue_iid)
+    else
+      project.issues_tracker.issue_url(issue_iid)
     end
+  end
 
-    no_project = OpenStruct.new(id: 0, name_with_namespace: 'No project')
-    projects.unshift(no_project)
-    projects.delete(issuable.project)
+  def url_for_internal_issue(issue_iid, project = @project, options = {})
+    helpers = Gitlab::Routing.url_helpers
 
-    options_from_collection_for_select(projects, :id, :name_with_namespace)
+    if options[:only_path]
+      helpers.namespace_project_issue_path(namespace_id: project.namespace, project_id: project, id: issue_iid)
+    else
+      helpers.namespace_project_issue_url(namespace_id: project.namespace, project_id: project, id: issue_iid)
+    end
   end
 
   def status_box_class(item)
-    if item.respond_to?(:expired?) && item.expired?
+    if item.try(:expired?)
       'status-box-expired'
-    elsif item.respond_to?(:merged?) && item.merged?
-      'status-box-merged'
+    elsif item.try(:merged?)
+      'status-box-mr-merged'
     elsif item.closed?
-      'status-box-closed'
+      'status-box-mr-closed'
+    elsif item.try(:upcoming?)
+      'status-box-upcoming'
     else
       'status-box-open'
     end
@@ -105,81 +65,43 @@ module IssuesHelper
     return 'hidden' if issue.closed? == closed
   end
 
-  def issue_to_atom(xml, issue)
-    xml.entry do
-      xml.id      namespace_project_issue_url(issue.project.namespace,
-                                              issue.project, issue)
-      xml.link    href: namespace_project_issue_url(issue.project.namespace,
-                                                    issue.project, issue)
-      xml.title   truncate(issue.title, length: 80)
-      xml.updated issue.created_at.xmlschema
-      xml.media   :thumbnail, width: "40", height: "40", url: image_url(avatar_icon(issue.author_email))
-      xml.author do |author|
-        xml.name issue.author_name
-        xml.email issue.author_email
-      end
-      xml.summary issue.title
-    end
-  end
-
-  def merge_requests_sentence(merge_requests)
-    # Sorting based on the `!123` or `group/project!123` reference will sort
-    # local merge requests first.
-    merge_requests.map do |merge_request|
-      merge_request.to_reference(@project)
-    end.sort.to_sentence(last_word_connector: ', or ')
-  end
-
   def confidential_icon(issue)
     icon('eye-slash') if issue.confidential?
   end
 
-  def emoji_icon(name, unicode = nil, aliases = [], sprite: true)
-    unicode ||= Emoji.emoji_filename(name) rescue ""
-
-    data = {
-      aliases: aliases.join(" "),
-      emoji: name,
-      unicode_name: unicode
-    }
-
-    if sprite
-      # Emoji icons for the emoji menu, these use a spritesheet.
-      content_tag :div, "",
-        class: "icon emoji-icon emoji-#{unicode}",
-        title: name,
-        data: data
-    else
-      # Emoji icons displayed separately, used for the awards already given
-      # to an issue or merge request.
-      content_tag :img, "",
-        class: "icon emoji",
-        title: name,
-        height: "20px",
-        width: "20px",
-        src: url_to_image("#{unicode}.png"),
-        data: data
+  def award_user_list(awards, current_user, limit: 10)
+    names = awards.map do |award|
+      award.user == current_user ? 'You' : award.user.name
     end
+
+    current_user_name = names.delete('You')
+    names = names.insert(0, current_user_name).compact.first(limit)
+
+    names << "#{awards.size - names.size} more." if awards.size > names.size
+
+    names.to_sentence
   end
 
-  def emoji_author_list(notes, current_user)
-    list = notes.map do |note|
-             note.author == current_user ? "me" : note.author.name
-           end
-
-    list.join(", ")
-  end
-
-  def note_active_class(notes, current_user)
-    if current_user && notes.pluck(:author_id).include?(current_user.id)
+  def award_state_class(awardable, awards, current_user)
+    if !can?(current_user, :award_emoji, awardable)
+      "disabled"
+    elsif current_user && awards.find { |a| a.user_id == current_user.id }
       "active"
     else
       ""
     end
   end
 
+  def award_user_authored_class(award)
+    if award == 'thumbsdown' || award == 'thumbsup'
+      'user-authored js-user-authored'
+    else
+      ''
+    end
+  end
+
   def awards_sort(awards)
-    awards.sort_by do |award, notes|
+    awards.sort_by do |award, award_emojis|
       if award == "thumbsup"
         0
       elsif award == "thumbsdown"
@@ -190,18 +112,33 @@ module IssuesHelper
     end.to_h
   end
 
-  def due_date_options
-    options = [
-      Issue::AnyDueDate,
-      Issue::NoDueDate,
-      Issue::DueThisWeek,
-      Issue::DueThisMonth,
-      Issue::Overdue
-    ]
+  def link_to_discussions_to_resolve(merge_request, single_discussion = nil)
+    link_text = merge_request.to_reference
+    link_text += " (discussion #{single_discussion.first_note.id})" if single_discussion
 
-    options_from_collection_for_select(options, 'name', 'title', params[:due_date])
+    path = if single_discussion
+             Gitlab::UrlBuilder.build(single_discussion.first_note)
+           else
+             project = merge_request.project
+             project_merge_request_path(project, merge_request)
+           end
+
+    link_to link_text, path
+  end
+
+  def show_new_issue_link?(project)
+    return false unless project
+    return false if project.archived?
+
+    # We want to show the link to users that are not signed in, that way they
+    # get directed to the sign-in/sign-up flow and afterwards to the new issue page.
+    return true unless current_user
+
+    can?(current_user, :create_issue, project)
   end
 
   # Required for Banzai::Filter::IssueReferenceFilter
   module_function :url_for_issue
+  module_function :url_for_internal_issue
+  module_function :url_for_tracker_issue
 end

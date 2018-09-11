@@ -1,3 +1,5 @@
+# Gitaly note: JV: does not need to be migrated, works without a repo.
+
 module Gitlab
   module GitRefValidator
     extend self
@@ -5,8 +7,11 @@ module Gitlab
     #
     # Returns true for a valid reference name, false otherwise
     def validate(ref_name)
-      Gitlab::Utils.system_silent(
-        %W(#{Gitlab.config.git.bin_path} check-ref-format refs/#{ref_name}))
+      not_allowed_prefixes = %w(refs/heads/ refs/remotes/ -)
+      return false if ref_name.start_with?(*not_allowed_prefixes)
+      return false if ref_name == 'HEAD'
+
+      Rugged::Reference.valid_name? "refs/heads/#{ref_name}"
     end
   end
 end

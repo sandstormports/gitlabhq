@@ -28,7 +28,8 @@ GitLab supports two ways of adding a new OAuth2 application to an instance. You
 can either add an application as a regular user or add it in the admin area.
 What this means is that GitLab can actually have instance-wide and a user-wide
 applications. There is no difference between them except for the different
-permission levels they are set (user/admin).
+permission levels they are set (user/admin). The default callback URL is 
+`http://your-gitlab.example.com/users/auth/gitlab/callback`
 
 ## Adding an application through the profile
 
@@ -62,6 +63,9 @@ it from the admin area.
 
 ![OAuth admin_applications](img/oauth_provider_admin_application.png)
 
+You're also able to mark an application as _trusted_ when creating it through the admin area. By doing that,
+the user authorization step is automatically skipped for this application.
+
 ---
 
 ## Authorized applications
@@ -73,8 +77,10 @@ in the **Authorized applications** section under **Profile Settings > Applicatio
 
 ---
 
-As you can see, the default scope `api` is used, which is the only scope that
-GitLab supports so far. At any time you can revoke any access by just clicking
-**Revoke**.
+GitLab's OAuth applications support scopes, which allow various actions that any given
+application can perform. Although there are only two scopes available at the
+moment – `read_user` and `api` – the groundwork has been laid to add more scopes easily.
+
+At any time you can revoke any access by just clicking **Revoke**.
 
 [oauth]: http://oauth.net/2/ "OAuth website"

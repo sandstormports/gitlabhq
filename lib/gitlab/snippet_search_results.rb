@@ -16,12 +16,8 @@ module Gitlab
       when 'snippet_blobs'
         snippet_blobs.page(page).per(per_page)
       else
-        super
+        super(scope, nil, false)
       end
-    end
-
-    def total_count
-      @total_count ||= snippet_titles_count + snippet_blobs_count
     end
 
     def snippet_titles_count
@@ -35,11 +31,11 @@ module Gitlab
     private
 
     def snippet_titles
-      limit_snippets.search(query).order('updated_at DESC')
+      limit_snippets.search(query).order('updated_at DESC').includes(:author)
     end
 
     def snippet_blobs
-      limit_snippets.search_code(query).order('updated_at DESC')
+      limit_snippets.search_code(query).order('updated_at DESC').includes(:author)
     end
 
     def default_scope

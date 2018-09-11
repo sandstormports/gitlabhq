@@ -1,8 +1,6 @@
 Rails.application.configure do
   # Settings specified here will take precedence over those in config/application.rb
 
-  config.logger = Logger.new(STDERR)
-
   # Code is not reloaded between requests
   config.cache_classes = true
 
@@ -10,10 +8,15 @@ Rails.application.configure do
   config.consider_all_requests_local       = false
   config.action_controller.perform_caching = true
 
-  config.serve_static_files = true
+  # Disable Rails's static asset server (Apache or nginx will already do this)
+  if Gitlab.rails5?
+    config.public_file_server.enabled = false
+  else
+    config.serve_static_files = false
+  end
 
   # Compress JavaScripts and CSS.
-  #config.assets.js_compressor = :uglifier
+  config.assets.js_compressor = :uglifier
   # config.assets.css_compressor = :sass
 
   # Don't fallback to assets pipeline if a precompiled asset is missed
@@ -28,9 +31,12 @@ Rails.application.configure do
   # Defaults to nil and saved in location specified by config.assets.prefix
   # config.assets.manifest = YOUR_PATH
 
-  config.assets.configure do |env|
-    env.cache = ActiveSupport::Cache::FileStore.new("read-only-cache/assets")
-  end
+  # Specifies the header that your server uses for sending files
+  # config.action_dispatch.x_sendfile_header = "X-Sendfile" # for apache
+  # config.action_dispatch.x_sendfile_header = 'X-Accel-Redirect' # for nginx
+
+  # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
+  # config.force_ssl = true
 
   # See everything in the log (default is :info)
   config.log_level = :info
@@ -41,8 +47,14 @@ Rails.application.configure do
     ActiveSupport::Notifications.unsubscribe "#{event}.action_view"
   end
 
+  # Prepend all log lines with the following tags
+  # config.log_tags = [ :subdomain, :uuid ]
+
+  # Use a different logger for distributed setups
+  # config.logger = ActiveSupport::TaggedLogging.new(SyslogLogger.new)
+
   # Enable serving of images, stylesheets, and JavaScripts from an asset server
-  # config.action_controller.asset_host = "http://assets.example.com"
+  config.action_controller.asset_host = ENV['GITLAB_CDN_HOST'] if ENV['GITLAB_CDN_HOST'].present?
 
   # Precompile additional assets (application.js, application.css, and all non-JS/CSS are already added)
   # config.assets.precompile += %w( search.js )
@@ -69,7 +81,7 @@ Rails.application.configure do
   config.action_mailer.perform_deliveries = true
   config.action_mailer.raise_delivery_errors = true
 
-  config.eager_load = false
+  config.eager_load = true
 
-  config.allow_concurrency = true
+  config.allow_concurrency = false
 end

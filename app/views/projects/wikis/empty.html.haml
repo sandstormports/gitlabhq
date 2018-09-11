@@ -1,7 +1,4 @@
-- page_title "Wiki"
-= render "header_title"
+- page_title _("Wiki")
+- @right_sidebar = false
 
-%h3.page-title Empty page
-%hr
-.error_message
-  You are not allowed to create wiki pages
+= render 'shared/empty_states/wikis'

@@ -1,3 +1,4 @@
+# rubocop:disable all
 class AddServicesDefault < ActiveRecord::Migration
   def up
     add_column :services, :default, :boolean, default: false
@@ -7,7 +8,7 @@ class AddServicesDefault < ActiveRecord::Migration
 
     execute <<-EOF
 UPDATE services
-SET #{default} = 1
+SET #{default} = true
 WHERE #{type} = 'GitlabIssueTrackerService'
 EOF
 

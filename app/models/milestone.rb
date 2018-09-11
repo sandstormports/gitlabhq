@@ -1,17 +1,4 @@
-# == Schema Information
-#
-# Table name: milestones
-#
-#  id          :integer          not null, primary key
-#  title       :string(255)      not null
-#  project_id  :integer          not null
-#  description :text
-#  due_date    :date
-#  created_at  :datetime
-#  updated_at  :datetime
-#  state       :string(255)
-#  iid         :integer
-#
+# frozen_string_literal: true
 
 class Milestone < ActiveRecord::Base
   # Represents a "No Milestone" state used for filtering Issues and Merge
@@ -20,25 +7,51 @@ class Milestone < ActiveRecord::Base
   None = MilestoneStruct.new('No Milestone', 'No Milestone', 0)
   Any = MilestoneStruct.new('Any Milestone', '', -1)
   Upcoming = MilestoneStruct.new('Upcoming', '#upcoming', -2)
+  Started = MilestoneStruct.new('Started', '#started', -3)
 
-  include InternalId
+  include CacheMarkdownField
+  include AtomicInternalId
+  include IidRoutes
   include Sortable
   include Referable
   include StripAttribute
   include Milestoneish
+  include Gitlab::SQL::Pattern
+
+  cache_markdown_field :title, pipeline: :single_line
+  cache_markdown_field :description
 
   belongs_to :project
+  belongs_to :group
+
+  has_internal_id :iid, scope: :project, init: ->(s) { s&.project&.milestones&.maximum(:iid) }
+  has_internal_id :iid, scope: :group, init: ->(s) { s&.group&.milestones&.maximum(:iid) }
+
   has_many :issues
   has_many :labels, -> { distinct.reorder('labels.title') },  through: :issues
   has_many :merge_requests
-  has_many :participants, -> { distinct.reorder('users.name') }, through: :issues, source: :assignee
+  has_many :events, as: :target, dependent: :destroy # rubocop:disable Cop/ActiveRecordDependent
 
+  scope :of_projects, ->(ids) { where(project_id: ids) }
+  scope :of_groups, ->(ids) { where(group_id: ids) }
   scope :active, -> { with_state(:active) }
   scope :closed, -> { with_state(:closed) }
-  scope :of_projects, ->(ids) { where(project_id: ids) }
+  scope :for_projects, -> { where(group: nil).includes(:project) }
 
-  validates :title, presence: true, uniqueness: { scope: :project_id }
-  validates :project, presence: true
+  scope :for_projects_and_groups, -> (project_ids, group_ids) do
+    conditions = []
+    conditions << arel_table[:project_id].in(project_ids) if project_ids&.compact&.any?
+    conditions << arel_table[:group_id].in(group_ids) if group_ids&.compact&.any?
+
+    where(conditions.reduce(:or))
+  end
+
+  validates :group, presence: true, unless: :project
+  validates :project, presence: true, unless: :group
+
+  validate :uniqueness_of_title, if: :title_changed?
+  validate :milestone_type_check
+  validate :start_date_should_be_less_than_due_date, if: proc { |m| m.start_date.present? && m.due_date.present? }
 
   strip_attributes :title
 
@@ -67,97 +80,206 @@ class Milestone < ActiveRecord::Base
     #
     # Returns an ActiveRecord::Relation.
     def search(query)
-      t = arel_table
-      pattern = "%#{query}%"
+      fuzzy_search(query, [:title, :description])
+    end
 
-      where(t[:title].matches(pattern).or(t[:description].matches(pattern)))
+    def filter_by_state(milestones, state)
+      case state
+      when 'closed' then milestones.closed
+      when 'all' then milestones
+      else milestones.active
+      end
+    end
+
+    def predefined?(milestone)
+      milestone == Any ||
+        milestone == None ||
+        milestone == Upcoming ||
+        milestone == Started
     end
   end
 
+  def self.reference_prefix
+    '%'
+  end
+
   def self.reference_pattern
-    nil
+    # NOTE: The iid pattern only matches when all characters on the expression
+    # are digits, so it will match %2 but not %2.1 because that's probably a
+    # milestone name and we want it to be matched as such.
+    @reference_pattern ||= %r{
+      (#{Project.reference_pattern})?
+      #{Regexp.escape(reference_prefix)}
+      (?:
+        (?<milestone_iid>
+          \d+(?!\S\w)\b # Integer-based milestone iid, or
+        ) |
+        (?<milestone_name>
+          [^"\s]+\b |  # String-based single-word milestone title, or
+          "[^"]+"      # String-based multi-word milestone surrounded in quotes
+        )
+      )
+    }x
   end
 
   def self.link_reference_pattern
     @link_reference_pattern ||= super("milestones", /(?<milestone>\d+)/)
   end
 
-  def self.upcoming
-    self.where('due_date > ?', Time.now).reorder(due_date: :asc).first
+  def self.upcoming_ids_by_projects(projects)
+    rel = unscoped.of_projects(projects).active.where('due_date > ?', Time.now)
+
+    if Gitlab::Database.postgresql?
+      rel.order(:project_id, :due_date).select('DISTINCT ON (project_id) id')
+    else
+      rel
+        .group(:project_id, :due_date, :id)
+        .having('due_date = MIN(due_date)')
+        .pluck(:id, :project_id, :due_date)
+        .uniq(&:second)
+        .map(&:first)
+    end
   end
 
-  def to_reference(from_project = nil)
-    escaped_title = self.title.gsub("]", "\\]")
-
-    h = Gitlab::Routing.url_helpers
-    url = h.namespace_project_milestone_url(self.project.namespace, self.project, self)
-
-    "[#{escaped_title}](#{url})"
+  def participants
+    User.joins(assigned_issues: :milestone).where("milestones.id = ?", id).uniq
   end
 
-  def reference_link_text(from_project = nil)
+  def self.sort_by_attribute(method)
+    sorted =
+      case method.to_s
+      when 'due_date_asc'
+        reorder(Gitlab::Database.nulls_last_order('due_date', 'ASC'))
+      when 'due_date_desc'
+        reorder(Gitlab::Database.nulls_last_order('due_date', 'DESC'))
+      when 'name_asc'
+        reorder(Arel::Nodes::Ascending.new(arel_table[:title].lower))
+      when 'name_desc'
+        reorder(Arel::Nodes::Descending.new(arel_table[:title].lower))
+      when 'start_date_asc'
+        reorder(Gitlab::Database.nulls_last_order('start_date', 'ASC'))
+      when 'start_date_desc'
+        reorder(Gitlab::Database.nulls_last_order('start_date', 'DESC'))
+      else
+        order_by(method)
+      end
+
+    sorted.with_order_id_desc
+  end
+
+  ##
+  # Returns the String necessary to reference this Milestone in Markdown. Group
+  # milestones only support name references, and do not support cross-project
+  # references.
+  #
+  # format - Symbol format to use (default: :iid, optional: :name)
+  #
+  # Examples:
+  #
+  #   Milestone.first.to_reference                           # => "%1"
+  #   Milestone.first.to_reference(format: :name)            # => "%\"goal\""
+  #   Milestone.first.to_reference(cross_namespace_project)  # => "gitlab-org/gitlab-ce%1"
+  #   Milestone.first.to_reference(same_namespace_project)   # => "gitlab-ce%1"
+  #
+  def to_reference(from = nil, format: :name, full: false)
+    format_reference = milestone_format_reference(format)
+    reference = "#{self.class.reference_prefix}#{format_reference}"
+
+    if project
+      "#{project.to_reference(from, full: full)}#{reference}"
+    else
+      reference
+    end
+  end
+
+  def reference_link_text(from = nil)
     self.title
   end
 
-  def expired?
-    if due_date
-      due_date.past?
-    else
-      false
-    end
+  def milestoneish_ids
+    id
   end
 
-  def expires_at
-    if due_date
-      if due_date.past?
-        "expired on #{due_date.to_s(:medium)}"
-      else
-        "expires on #{due_date.to_s(:medium)}"
-      end
-    end
+  def for_display
+    self
   end
 
   def can_be_closed?
     active? && issues.opened.count.zero?
   end
 
-  def is_empty?(user = nil)
-    total_items_count(user).zero?
-  end
-
   def author_id
     nil
   end
 
-  # Sorts the issues for the given IDs.
-  #
-  # This method runs a single SQL query using a CASE statement to update the
-  # position of all issues in the current milestone (scoped to the list of IDs).
-  #
-  # Given the ids [10, 20, 30] this method produces a SQL query something like
-  # the following:
-  #
-  #     UPDATE issues
-  #     SET position = CASE
-  #       WHEN id = 10 THEN 1
-  #       WHEN id = 20 THEN 2
-  #       WHEN id = 30 THEN 3
-  #       ELSE position
-  #     END
-  #     WHERE id IN (10, 20, 30);
-  #
-  # This method expects that the IDs given in `ids` are already Fixnums.
-  def sort_issues(ids)
-    pairs = []
+  def title=(value)
+    write_attribute(:title, sanitize_title(value)) if value.present?
+  end
 
-    ids.each_with_index do |id, index|
-      pairs << id
-      pairs << index + 1
+  def safe_title
+    title.to_slug.normalize.to_s
+  end
+
+  def parent
+    group || project
+  end
+
+  def group_milestone?
+    group_id.present?
+  end
+
+  def project_milestone?
+    project_id.present?
+  end
+
+  private
+
+  # Milestone titles must be unique across project milestones and group milestones
+  def uniqueness_of_title
+    if project
+      relation = Milestone.for_projects_and_groups([project_id], [project.group&.id])
+    elsif group
+      project_ids = group.projects.map(&:id)
+      relation = Milestone.for_projects_and_groups(project_ids, [group.id])
     end
 
-    conditions = 'WHEN id = ? THEN ? ' * ids.length
+    title_exists = relation.find_by_title(title)
+    errors.add(:title, "already being used for another group or project milestone.") if title_exists
+  end
 
-    issues.where(id: ids).
-      update_all(["position = CASE #{conditions} ELSE position END", *pairs])
+  # Milestone should be either a project milestone or a group milestone
+  def milestone_type_check
+    if group_id && project_id
+      field = project_id_changed? ? :project_id : :group_id
+      errors.add(field, "milestone should belong either to a project or a group.")
+    end
+  end
+
+  def milestone_format_reference(format = :iid)
+    raise ArgumentError, 'Unknown format' unless [:iid, :name].include?(format)
+
+    if group_milestone? && format == :iid
+      raise ArgumentError, 'Cannot refer to a group milestone by an internal id!'
+    end
+
+    if format == :name && !name.include?('"')
+      %("#{name}")
+    else
+      iid
+    end
+  end
+
+  def sanitize_title(value)
+    CGI.unescape_html(Sanitize.clean(value.to_s))
+  end
+
+  def start_date_should_be_less_than_due_date
+    if due_date <= start_date
+      errors.add(:due_date, "must be greater than start date")
+    end
+  end
+
+  def issues_finder_params
+    { project_id: project_id }
   end
 end

@@ -1,76 +1,110 @@
-%tr.build
+- job = build.present(current_user: current_user)
+- pipeline = job.pipeline
+- admin = local_assigns.fetch(:admin, false)
+- ref = local_assigns.fetch(:ref, nil)
+- commit_sha = local_assigns.fetch(:commit_sha, nil)
+- retried = local_assigns.fetch(:retried, false)
+- pipeline_link = local_assigns.fetch(:pipeline_link, false)
+- stage = local_assigns.fetch(:stage, false)
+- allow_retry = local_assigns.fetch(:allow_retry, false)
+
+%tr.build.commit{ class: ('retried' if retried) }
   %td.status
-    - if can?(current_user, :read_build, build)
-      = ci_status_with_icon(build.status, namespace_project_build_url(build.project.namespace, build.project, build))
+    = render "ci/status/badge", status: job.detailed_status(current_user), title: job.status_title
+
+  %td.branch-commit
+    - if can?(current_user, :read_build, job)
+      = link_to project_job_path(job.project, job) do
+        %span.build-link ##{job.id}
     - else
-      = ci_status_with_icon(build.status)
+      %span.build-link ##{job.id}
 
-  %td.build-link
-    - if can?(current_user, :read_build, build)
-      = link_to namespace_project_build_url(build.project.namespace, build.project, build) do
-        %strong ##{build.id}
-    - else
-      %strong ##{build.id}
+    - if ref
+      - if job.ref
+        .icon-container
+          = job.tag? ? icon('tag') : sprite_icon('fork', css_class: 'sprite')
+        = link_to job.ref, project_ref_path(job.project, job.ref), class: "ref-name"
+      - else
+        .light none
+      .icon-container.commit-icon
+        = custom_icon("icon_commit")
 
-    - if build.stuck?
-      %i.fa.fa-warning.text-warning
+    - if commit_sha
+      = link_to job.short_sha, project_commit_path(job.project, job.sha), class: "commit-sha"
 
-  - if defined?(commit_sha) && commit_sha
+    - if job.stuck?
+      = icon('warning', class: 'text-warning has-tooltip', title: 'Job is stuck. Check runners.')
+
+    - if retried
+      = icon('refresh', class: 'text-warning has-tooltip', title: 'Job was retried')
+
+    .label-container
+      - if job.tags.any?
+        - job.tags.each do |tag|
+          %span.badge.badge-primary
+            = tag
+      - if job.try(:trigger_request)
+        %span.badge.badge-info triggered
+      - if job.try(:allow_failure)
+        %span.badge.badge-danger allowed to fail
+      - if job.action?
+        %span.badge.badge-info manual
+
+  - if pipeline_link
     %td
-      = link_to build.short_sha, namespace_project_commit_path(build.project.namespace, build.project, build.sha), class: "monospace"
+      = link_to pipeline_path(pipeline) do
+        %span.pipeline-id ##{pipeline.id}
+      %span by
+      - if pipeline.user
+        = user_avatar(user: pipeline.user, size: 20)
+      - else
+        %span.api API
 
-  %td
-    - if build.ref
-      = link_to build.ref, namespace_project_commits_path(build.project.namespace, build.project, build.ref)
-    - else
-      .light none
-
-  - if defined?(runner) && runner
+  - if admin
     %td
-      - if build.try(:runner)
-        = runner_link(build.runner)
+      - if job.project
+        = link_to job.project.full_name, admin_project_path(job.project)
+    %td
+      - if job.try(:runner)
+        = runner_link(job.runner)
       - else
         .light none
 
-  - if defined?(stage) && stage
+  - if stage
     %td
-      = build.stage
+      = job.stage
 
   %td
-    = build.name
-
-    .label-container
-      - if build.tags.any?
-        - build.tags.each do |tag|
-          %span.label.label-primary
-            = tag
-      - if build.try(:trigger_request)
-        %span.label.label-info triggered
-      - if build.try(:allow_failure)
-        %span.label.label-danger allowed to fail
-
-  %td.duration
-    - if build.duration
-      #{duration_in_words(build.finished_at, build.started_at)}
-
-  %td.timestamp
-    - if build.finished_at
-      %span #{time_ago_with_tooltip(build.finished_at)}
-
-  - if defined?(coverage) && coverage
-    %td.coverage
-      - if build.try(:coverage)
-        #{build.coverage}%
+    = job.name
 
   %td
-    .pull-right
-      - if can?(current_user, :read_build, build) && build.artifacts?
-        = link_to download_namespace_project_build_artifacts_path(build.project.namespace, build.project, build), title: 'Download artifacts' do
-          %i.fa.fa-download
-      - if can?(current_user, :update_build, build)
-        - if build.active?
-          = link_to cancel_namespace_project_build_path(build.project.namespace, build.project, build, return_to: request.original_url), method: :post, title: 'Cancel' do
-            %i.fa.fa-remove.cred
-        - elsif defined?(allow_retry) && allow_retry && build.retryable?
-          = link_to retry_namespace_project_build_path(build.project.namespace, build.project, build, return_to: request.original_url), method: :post, title: 'Retry' do
-            %i.fa.fa-repeat
+    - if job.duration
+      %p.duration
+        = custom_icon("icon_timer")
+        = duration_in_numbers(job.duration)
+
+    - if job.finished_at
+      %p.finished-at
+        = icon("calendar")
+        %span= time_ago_with_tooltip(job.finished_at)
+
+  %td.coverage
+    - if job.try(:coverage)
+      #{job.coverage}%
+
+  %td
+    .float-right
+      - if can?(current_user, :read_build, job) && job.artifacts?
+        = link_to download_project_job_artifacts_path(job.project, job), rel: 'nofollow', download: '', title: 'Download artifacts', class: 'btn btn-build' do
+          = sprite_icon('download')
+      - if can?(current_user, :update_build, job)
+        - if job.active?
+          = link_to cancel_project_job_path(job.project, job, return_to: request.original_url), method: :post, title: 'Cancel', class: 'btn btn-build' do
+            = icon('remove', class: 'cred')
+        - elsif allow_retry
+          - if job.playable? && !admin && can?(current_user, :update_build, job)
+            = link_to play_project_job_path(job.project, job, return_to: request.original_url), method: :post, title: 'Play', class: 'btn btn-build' do
+              = custom_icon('icon_play')
+          - elsif job.retryable?
+            = link_to retry_project_job_path(job.project, job, return_to: request.original_url), method: :post, title: 'Retry', class: 'btn btn-build' do
+              = icon('repeat')

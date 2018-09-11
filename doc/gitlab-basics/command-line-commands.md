@@ -4,45 +4,69 @@
 
 In Git, when you copy a project you say you "clone" it. To work on a git project locally (from your own computer), you will need to clone it. To do this, sign in to GitLab.
 
-When you are on your Dashboard, click on the project that you'd like to clone, which you'll find at the right side of your screen.
+When you are on your Dashboard, click on the project that you'd like to clone.
+To work in the project, you can copy a link to the Git repository through a SSH
+or a HTTPS protocol. SSH is easier to use after it's been
+[set up](create-your-ssh-keys.md). While you are at the **Project** tab, select
+HTTPS or SSH from the dropdown menu and copy the link using the _Copy URL to clipboard_
+button (you'll have to paste it on your shell in the next step).
 
-![Select a project](basicsimages/select_project.png)
-
-To work in the project, you can copy a link to the Git repository through a SSH or a HTTPS protocol. SSH is easier to use after it's been [setup](create-your-ssh-keys.md). When you're in the project, click on the HTTPS or SSH button at the right side of your screen. Then copy the link (you'll have to paste it on your shell in the next step).
-
-![Copy the HTTPS or SSH](basicsimages/https.png)
+![Copy the HTTPS or SSH](img/project_clone_url.png)
 
 ## On the command line
 
+This section has examples of some basic shell commands that you might find useful. For more information, search the web for _bash commands_.
+
 ### Clone your project
-Go to your computer's shell and type the following command:
+
+Go to your computer's shell and type the following command with your SSH or HTTPS URL:
+
 ```
 git clone PASTE HTTPS OR SSH HERE
 ```
 
 A clone of the project will be created in your computer.
 
-### Go into a project, directory or file to work in it
+>**Note:** If you clone your project via a URL that contains special characters, make sure that characters are URL-encoded.
+
+### Go into a project directory to work in it
+
 ```
-cd NAME-OF-PROJECT-OR-FILE
+cd NAME-OF-PROJECT
 ```
 
-### Go back one directory or file
+### Go back one directory
+
 ```
-cd ../
+cd ..
 ```
 
-### View what’s in the directory that you are in
+### List what’s in the current directory
+
 ```
 ls
 ```
 
-### Create a directory
+### List what’s in the current directory that starts with `a`
+
+```
+ls a*
+```
+
+### List what’s in the current directory that ends with `.md`
+
+```
+ls *.md
+```
+
+### Create a new directory
+
 ```
 mkdir NAME-OF-YOUR-DIRECTORY
 ```
 
-### Create a README.md or file in directory
+### Create a README.md file in the current directory
+
 ```
 touch README.md
 nano README.md
@@ -52,28 +76,52 @@ nano README.md
 #### Press: enter
 ```
 
+### Show the contents of the README.md file
+
+```
+cat README.md
+```
+
 ### Remove a file
+
 ```
 rm NAME-OF-FILE
 ```
 
 ### Remove a directory and all of its contents
+
 ```
-rm -rf NAME-OF-DIRECTORY
+rm -r NAME-OF-DIRECTORY
 ```
 
-### View history in the command line
+### View command history
+
 ```
 history
 ```
 
+### Execute command 123 from history
+
+```
+!123
+```
+
 ### Carry out commands for which the account you are using lacks authority
+
 You will be asked for an administrator’s password.
+
 ```
 sudo
 ```
 
-### Tell where you are
+### Show which directory I am in
+
 ```
 pwd
+```
+
+### Clear the shell window
+
+```
+clear
 ```

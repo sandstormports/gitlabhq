@@ -1,4 +1,5 @@
 module EmailsHelper
+  include AppearancesHelper
 
   # Google Actions
   # https://developers.google.com/gmail/markup/reference/go-to-action
@@ -11,7 +12,7 @@ module EmailsHelper
         "action" => {
           "@type" => "ViewAction",
           "name" => name,
-          "url" => url,
+          "url" => url
           }
         }
 
@@ -23,19 +24,14 @@ module EmailsHelper
 
   def action_title(url)
     return unless url
-    ["merge_requests", "issues", "commit"].each do |action|
+
+    %w(merge_requests issues commit).each do |action|
       if url.split("/").include?(action)
         return "View #{action.humanize.singularize}"
       end
     end
 
     nil
-  end
-
-  def color_email_diff(diffcontent)
-    formatter = Rouge::Formatters::HTML.new(css_class: 'highlight', inline_theme: 'github')
-    lexer = Rouge::Lexers::Diff
-    raw formatter.format(lexer.lex(diffcontent))
   end
 
   def password_reset_token_valid_time
@@ -55,5 +51,49 @@ module EmailsHelper
     link_tag = link_to('request a new one', new_user_password_url(user_email: @user.email))
     msg = "This link is valid for #{password_reset_token_valid_time}.  "
     msg << "After it expires, you can #{link_tag}."
+  end
+
+  def header_logo
+    if current_appearance&.header_logo?
+      image_tag(
+        current_appearance.header_logo,
+        style: 'height: 50px'
+      )
+    else
+      image_tag(
+        image_url('mailers/gitlab_header_logo.gif'),
+        size: '55x50',
+        alt: 'GitLab'
+      )
+    end
+  end
+
+  def email_default_heading(text)
+    content_tag :h1, text, style: [
+      "font-family:'Helvetica Neue',Helvetica,Arial,sans-serif",
+      'color:#333333',
+      'font-size:18px',
+      'font-weight:400',
+      'line-height:1.4',
+      'padding:0',
+      'margin:0',
+      'text-align:center'
+    ].join(';')
+  end
+
+  # "You are receiving this email because #{reason}"
+  def notification_reason_text(reason)
+    string = case reason
+             when NotificationReason::OWN_ACTIVITY
+               'of your activity'
+             when NotificationReason::ASSIGNED
+               'you have been assigned an item'
+             when NotificationReason::MENTIONED
+               'you have been mentioned'
+             else
+               'of your account'
+             end
+
+    "#{string} on #{Gitlab.config.gitlab.host}"
   end
 end

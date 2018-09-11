@@ -1,56 +1,81 @@
-%ul.nav.nav-sidebar
-  = nav_link(path: ['root#index', 'projects#trending', 'projects#starred', 'dashboard/projects#index'], html_options: {class: 'home'}) do
-    = link_to dashboard_projects_path, title: 'Projects' do
-      = icon('bookmark fw')
-      %span
-        Projects
-  = nav_link(controller: :todos) do
-    = link_to dashboard_todos_path, title: 'Todos' do
-      = icon('bell fw')
-      %span
-        Todos
-        %span.count.todos-pending-count= number_with_delimiter(todos_pending_count)
-  = nav_link(path: 'dashboard#activity') do
-    = link_to activity_dashboard_path, class: 'shortcuts-activity', title: 'Activity' do
-      = icon('dashboard fw')
-      %span
-        Activity
-  -# = nav_link(controller: :groups) do
-    = link_to dashboard_groups_path, title: 'Groups' do
-      = icon('group fw')
-      %span
-        Groups
-  = nav_link(controller: :milestones) do
-    = link_to dashboard_milestones_path, title: 'Milestones' do
-      = icon('clock-o fw')
-      %span
-        Milestones
-  = nav_link(path: 'dashboard#issues') do
-    = link_to assigned_issues_dashboard_path, title: 'Issues', class: 'shortcuts-issues' do
-      = icon('exclamation-circle fw')
-      %span
-        Issues
-        %span.count= number_with_delimiter(current_user.assigned_issues.opened.count)
-  = nav_link(path: 'dashboard#merge_requests') do
-    = link_to assigned_mrs_dashboard_path, title: 'Merge Requests', class: 'shortcuts-merge_requests' do
-      = icon('tasks fw')
-      %span
-        Merge Requests
-        %span.count= number_with_delimiter(current_user.assigned_merge_requests.opened.count)
-  -# = nav_link(controller: :snippets) do
-    = link_to dashboard_snippets_path, title: 'Snippets' do
-      = icon('clipboard fw')
-      %span
-        Snippets
-  -# = nav_link(controller: :help) do
-    = link_to help_path, title: 'Help' do
-      = icon('question-circle fw')
-      %span
-        Help
+%ul.list-unstyled.navbar-sub-nav
+  - if dashboard_nav_link?(:projects)
+    = nav_link(path: ['root#index', 'projects#trending', 'projects#starred', 'dashboard/projects#index'], html_options: { id: 'nav-projects-dropdown', class: "home dropdown header-projects qa-projects-dropdown" }) do
+      %button{ type: 'button', data: { toggle: "dropdown" } }
+        = _('Projects')
+        = sprite_icon('angle-down', css_class: 'caret-down')
+      .dropdown-menu.frequent-items-dropdown-menu
+        = render "layouts/nav/projects_dropdown/show"
 
-  %li.separate-item
-  = nav_link(controller: :profile) do
-    = link_to profile_path, title: 'Profile Settings', data: {placement: 'bottom'} do
-      = icon('user fw')
-      %span
-        Profile Settings
+  - if dashboard_nav_link?(:groups)
+    = nav_link(controller: ['dashboard/groups', 'explore/groups'], html_options: { id: 'nav-groups-dropdown', class: "home dropdown header-groups qa-groups-dropdown" }) do
+      %button{ type: 'button', data: { toggle: "dropdown" } }
+        = _('Groups')
+        = sprite_icon('angle-down', css_class: 'caret-down')
+      .dropdown-menu.frequent-items-dropdown-menu
+        = render "layouts/nav/groups_dropdown/show"
+
+  - if dashboard_nav_link?(:activity)
+    = nav_link(path: 'dashboard#activity', html_options: { class: "d-none d-lg-block d-xl-block" }) do
+      = link_to activity_dashboard_path, class: 'dashboard-shortcuts-activity', title: _('Activity') do
+        = _('Activity')
+
+  - if dashboard_nav_link?(:milestones)
+    = nav_link(controller: 'dashboard/milestones', html_options: { class: "d-none d-lg-block d-xl-block" }) do
+      = link_to dashboard_milestones_path, class: 'dashboard-shortcuts-milestones', title: _('Milestones') do
+        = _('Milestones')
+
+  - if dashboard_nav_link?(:snippets)
+    = nav_link(controller: 'dashboard/snippets', html_options: { class: "d-none d-lg-block d-xl-block" }) do
+      = link_to dashboard_snippets_path, class: 'dashboard-shortcuts-snippets', title: _('Snippets') do
+        = _('Snippets')
+
+  - if any_dashboard_nav_link?([:groups, :milestones, :activity, :snippets])
+    %li.header-more.dropdown.d-lg-none.d-xl-none
+      %a{ href: "#", data: { toggle: "dropdown" } }
+        = _('More')
+        = sprite_icon('angle-down', css_class: 'caret-down')
+      .dropdown-menu
+        %ul
+          - if dashboard_nav_link?(:activity)
+            = nav_link(path: 'dashboard#activity') do
+              = link_to activity_dashboard_path, title: _('Activity') do
+                = _('Activity')
+
+          - if dashboard_nav_link?(:milestones)
+            = nav_link(controller: 'dashboard/milestones') do
+              = link_to dashboard_milestones_path, class: 'dashboard-shortcuts-milestones', title: _('Milestones') do
+                = _('Milestones')
+
+          - if dashboard_nav_link?(:snippets)
+            = nav_link(controller: 'dashboard/snippets') do
+              = link_to dashboard_snippets_path, class: 'dashboard-shortcuts-snippets', title: _('Snippets') do
+                = _('Snippets')
+
+  -# Shortcut to Dashboard > Projects
+  - if dashboard_nav_link?(:projects)
+    %li.hidden
+      = link_to dashboard_projects_path, title: _('Projects'), class: 'dashboard-shortcuts-projects' do
+        = _('Projects')
+
+  - if current_controller?('ide')
+    %li.line-separator.d-none.d-sm-block
+      = nav_link(controller: 'ide') do
+        = link_to '#', class: 'dashboard-shortcuts-web-ide', title: _('Web IDE') do
+          = _('Web IDE')
+
+  - if Gitlab::Sherlock.enabled? || can?(current_user, :read_instance_statistics)
+    %li.line-separator.d-none.d-sm-block
+  - if can?(current_user, :read_instance_statistics)
+    = nav_link(controller: [:conversational_development_index, :cohorts]) do
+      = link_to instance_statistics_root_path, title: _('Instance Statistics'), aria: { label: _('Instance Statistics') }, data: {toggle: 'tooltip', placement: 'bottom', container: 'body'} do
+        = sprite_icon('chart', size: 18)
+  - if current_user.admin?
+    = nav_link(controller: 'admin/dashboard') do
+      = link_to admin_root_path, class: 'admin-icon qa-admin-area-link', title: _('Admin area'), aria: { label: _('Admin area') }, data: {toggle: 'tooltip', placement: 'bottom', container: 'body'} do
+        = sprite_icon('admin', size: 18)
+  - if Gitlab::Sherlock.enabled?
+    %li
+      = link_to sherlock_transactions_path, class: 'admin-icon', title: _('Sherlock Transactions'),
+        data: {toggle: 'tooltip', placement: 'bottom', container: 'body'} do
+        = icon('tachometer fw')

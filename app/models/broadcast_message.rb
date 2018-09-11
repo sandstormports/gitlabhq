@@ -1,19 +1,10 @@
-# == Schema Information
-#
-# Table name: broadcast_messages
-#
-#  id         :integer          not null, primary key
-#  message    :text             not null
-#  starts_at  :datetime
-#  ends_at    :datetime
-#  created_at :datetime
-#  updated_at :datetime
-#  color      :string(255)
-#  font       :string(255)
-#
+# frozen_string_literal: true
 
 class BroadcastMessage < ActiveRecord::Base
+  include CacheMarkdownField
   include Sortable
+
+  cache_markdown_field :message, pipeline: :broadcast_message
 
   validates :message,   presence: true
   validates :starts_at, presence: true
@@ -25,10 +16,30 @@ class BroadcastMessage < ActiveRecord::Base
   default_value_for :color, '#E75E40'
   default_value_for :font,  '#FFFFFF'
 
+  CACHE_KEY = 'broadcast_message_current'.freeze
+
+  after_commit :flush_redis_cache
+
   def self.current
-    Rails.cache.fetch("broadcast_message_current", expires_in: 1.minute) do
-      where("ends_at > :now AND starts_at <= :now", now: Time.zone.now).last
-    end
+    messages = Rails.cache.fetch(CACHE_KEY, expires_in: cache_expires_in) { current_and_future_messages.to_a }
+
+    return messages if messages.empty?
+
+    now_or_future = messages.select(&:now_or_future?)
+
+    # If there are cached entries but none are to be displayed we'll purge the
+    # cache so we don't keep running this code all the time.
+    Rails.cache.delete(CACHE_KEY) if now_or_future.empty?
+
+    now_or_future.select(&:now?)
+  end
+
+  def self.current_and_future_messages
+    where('ends_at > :now', now: Time.zone.now).order_id_asc
+  end
+
+  def self.cache_expires_in
+    nil
   end
 
   def active?
@@ -41,5 +52,21 @@ class BroadcastMessage < ActiveRecord::Base
 
   def ended?
     ends_at < Time.zone.now
+  end
+
+  def now?
+    (starts_at..ends_at).cover?(Time.zone.now)
+  end
+
+  def future?
+    starts_at > Time.zone.now
+  end
+
+  def now_or_future?
+    now? || future?
+  end
+
+  def flush_redis_cache
+    Rails.cache.delete(CACHE_KEY)
   end
 end

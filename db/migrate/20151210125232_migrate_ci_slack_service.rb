@@ -1,5 +1,5 @@
 class MigrateCiSlackService < ActiveRecord::Migration
-  include Gitlab::Database
+  include Gitlab::Database::MigrationHelpers
 
   def up
     properties_query = 'SELECT properties FROM ci_services ' \

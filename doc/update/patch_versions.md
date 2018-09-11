@@ -1,7 +1,14 @@
-# Universal update guide for patch versions
-*Make sure you view this [upgrade guide](https://gitlab.com/gitlab-org/gitlab-ce/blob/master/doc/update/patch_versions.md) from the `master` branch for the most up to date instructions.*
+---
+comments: false
+---
 
-For example from 7.14.0 to 7.14.3, also see the [semantic versioning specification](http://semver.org/).
+# Universal update guide for patch versions
+
+## Select Version to Install
+
+Make sure you view [this update guide](https://gitlab.com/gitlab-org/gitlab-ce/blob/master/doc/update/patch_versions.md) from the tag (version) of GitLab you would like to install.
+In most cases this should be the highest numbered production tag (without rc in it).
+You can select the tag in the version dropdown in the top left corner of GitLab (below the menu bar).
 
 ### 0. Backup
 
@@ -11,6 +18,7 @@ user on the database version)
 
 ```bash
 cd /home/git/gitlab
+
 sudo -u git -H bundle exec rake gitlab:backup:create RAILS_ENV=production
 ```
 
@@ -29,29 +37,13 @@ current version with `cat VERSION`).
 
 ```bash
 cd /home/git/gitlab
+
 sudo -u git -H git fetch --all
-sudo -u git -H git checkout -- Gemfile.lock db/schema.rb
+sudo -u git -H git checkout -- Gemfile.lock db/schema.rb locale
 sudo -u git -H git checkout LATEST_TAG -b LATEST_TAG
 ```
 
-### 3. Update gitlab-shell to the corresponding version
-
-```bash
-cd /home/git/gitlab-shell
-sudo -u git -H git fetch
-sudo -u git -H git checkout v`cat /home/git/gitlab/GITLAB_SHELL_VERSION` -b v`cat /home/git/gitlab/GITLAB_SHELL_VERSION`
-```
-
-### 4. Update gitlab-workhorse to the corresponding version
-
-```bash
-cd /home/git/gitlab-workhorse
-sudo -u git -H git fetch
-sudo -u git -H git checkout `cat /home/git/gitlab/GITLAB_WORKHORSE_VERSION` -b `cat /home/git/gitlab/GITLAB_WORKHORSE_VERSION`
-sudo -u git -H make
-```
-
-### 5. Install libs, migrations, etc.
+### 3. Install libs, migrations, etc.
 
 ```bash
 cd /home/git/gitlab
@@ -68,22 +60,66 @@ sudo -u git -H bundle clean
 # Run database migrations
 sudo -u git -H bundle exec rake db:migrate RAILS_ENV=production
 
+# Compile GetText PO files
+# Internationalization was added in `v9.2.0` so these commands are only
+# required for versions equal or major to it.
+sudo -u git -H bundle exec rake gettext:pack RAILS_ENV=production
+sudo -u git -H bundle exec rake gettext:po_to_json RAILS_ENV=production
+
 # Clean up assets and cache
-sudo -u git -H bundle exec rake assets:clean assets:precompile cache:clear RAILS_ENV=production
+sudo -u git -H bundle exec rake yarn:install gitlab:assets:clean gitlab:assets:compile cache:clear RAILS_ENV=production NODE_ENV=production
 ```
 
-### 6. Start application
+### 4. Update gitlab-workhorse to the corresponding version
+
+```bash
+cd /home/git/gitlab
+
+sudo -u git -H bundle exec rake "gitlab:workhorse:install[/home/git/gitlab-workhorse]" RAILS_ENV=production
+```
+
+### 5. Update gitaly to the corresponding version
+
+```bash
+cd /home/git/gitlab
+
+sudo -u git -H bundle exec rake "gitlab:gitaly:install[/home/git/gitaly]" RAILS_ENV=production
+```
+
+### 6. Update gitlab-shell to the corresponding version
+
+```bash
+cd /home/git/gitlab-shell
+
+sudo -u git -H git fetch --all --tags
+sudo -u git -H git checkout v$(</home/git/gitlab/GITLAB_SHELL_VERSION) -b v$(</home/git/gitlab/GITLAB_SHELL_VERSION)
+sudo -u git -H sh -c 'if [ -x bin/compile ]; then bin/compile; fi'
+```
+
+### 7. Update gitlab-pages to the corresponding version (skip if not using pages)
+
+```bash
+cd /home/git/gitlab-pages
+
+sudo -u git -H git fetch --all --tags
+sudo -u git -H git checkout v$(</home/git/gitlab/GITLAB_PAGES_VERSION)
+sudo -u git -H make
+```
+
+### 8. Start application
 
 ```bash
 sudo service gitlab start
 sudo service nginx restart
 ```
 
-### 7. Check application status
+### 9. Check application status
 
 Check if GitLab and its environment are configured correctly:
 
 ```bash
+cd /home/git/gitlab
+
 sudo -u git -H bundle exec rake gitlab:env:info RAILS_ENV=production
 ```
 

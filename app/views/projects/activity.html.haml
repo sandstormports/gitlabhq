@@ -1,6 +1,8 @@
-- page_title "Activity"
-- header_title project_title(@project, "Activity", activity_project_path(@project))
+- @no_container = true
 
-= render 'projects/last_push'
+- page_title _("Activity")
+
+%div{ class: container_class }
+  = render 'projects/last_push'
 
 = render 'projects/activity'

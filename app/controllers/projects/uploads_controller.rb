@@ -1,55 +1,30 @@
 class Projects::UploadsController < Projects::ApplicationController
-  skip_before_action :reject_blocked!, :project,
-    :repository, if: -> { action_name == 'show' && image? }
+  include UploadsActions
+  include WorkhorseRequest
 
-  before_action :authorize_upload_file!, only: [:create]
+  # These will kick you out if you don't have access.
+  skip_before_action :project, :repository,
+    if: -> { action_name == 'show' && image_or_video? }
 
-  def create
-    link_to_file = ::Projects::UploadService.new(project, params[:file]).
-      execute
-
-    respond_to do |format|
-      if link_to_file
-        format.json do
-          render json: { link: link_to_file }
-        end
-      else
-        format.json do
-          render json: 'Invalid file.', status: :unprocessable_entity
-        end
-      end
-    end
-  end
-
-  def show
-    return render_404 if uploader.nil? || !uploader.file.exists?
-
-    disposition = uploader.image? ? 'inline' : 'attachment'
-    send_file uploader.file.path, disposition: disposition
-  end
+  before_action :authorize_upload_file!, only: [:create, :authorize]
+  before_action :verify_workhorse_api!, only: [:authorize]
 
   private
 
-  def uploader
-    return @uploader if defined?(@uploader)
+  def upload_model_class
+    Project
+  end
+
+  def uploader_class
+    FileUploader
+  end
+
+  def find_model
+    return @project if @project
 
     namespace = params[:namespace_id]
     id = params[:project_id]
 
-    file_project = Project.find_with_namespace("#{namespace}/#{id}")
-
-    if file_project.nil?
-      @uploader = nil
-      return
-    end
-
-    @uploader = FileUploader.new(file_project, params[:secret])
-    @uploader.retrieve_from_store!(params[:filename])
-
-    @uploader
-  end
-
-  def image?
-    uploader && uploader.file.exists? && uploader.image?
+    Project.find_by_full_path("#{namespace}/#{id}")
   end
 end

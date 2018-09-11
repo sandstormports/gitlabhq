@@ -1,17 +1,20 @@
 module Gitlab
   module Diff
     class Highlight
-      attr_reader :diff_file, :diff_lines, :raw_lines
+      attr_reader :diff_file, :diff_lines, :raw_lines, :repository
 
-      delegate :old_path, :new_path, :old_ref, :new_ref, to: :diff_file, prefix: :diff
+      delegate :old_path, :new_path, :old_sha, :new_sha, to: :diff_file, prefix: :diff
 
-      def initialize(diff_lines)
+      def initialize(diff_lines, repository: nil)
+        @repository = repository
+
         if diff_lines.is_a?(Gitlab::Diff::File)
           @diff_file = diff_lines
           @diff_lines = @diff_file.diff_lines
         else
           @diff_lines = diff_lines
         end
+
         @raw_lines = @diff_lines.map(&:text)
       end
 
@@ -19,15 +22,22 @@ module Gitlab
         @diff_lines.map.with_index do |diff_line, i|
           diff_line = diff_line.dup
           # ignore highlighting for "match" lines
-          next diff_line if diff_line.type == 'match' || diff_line.type == 'nonewline'
+          next diff_line if diff_line.meta?
 
           rich_line = highlight_line(diff_line) || diff_line.text
 
           if line_inline_diffs = inline_diffs[i]
-            rich_line = InlineDiffMarker.new(diff_line.text, rich_line).mark(line_inline_diffs)
+            begin
+              rich_line = InlineDiffMarker.new(diff_line.text, rich_line).mark(line_inline_diffs)
+            # This should only happen when the encoding of the diff doesn't
+            # match the blob, which is a bug. But we shouldn't fail to render
+            # completely in that case, even though we want to report the error.
+            rescue RangeError => e
+              Gitlab::Sentry.track_exception(e, issue_url: 'https://gitlab.com/gitlab-org/gitlab-ce/issues/45441')
+            end
           end
 
-          diff_line.text = rich_line
+          diff_line.rich_text = rich_line
 
           diff_line
         end
@@ -38,18 +48,19 @@ module Gitlab
       def highlight_line(diff_line)
         return unless diff_file && diff_file.diff_refs
 
-        line_prefix = diff_line.text.match(/\A(.)/) ? $1 : ' '
-
-        case diff_line.type
-        when 'new', nil
-          rich_line = new_lines[diff_line.new_pos - 1]
-        when 'old'
-          rich_line = old_lines[diff_line.old_pos - 1]
-        end
+        rich_line =
+          if diff_line.unchanged? || diff_line.added?
+            new_lines[diff_line.new_pos - 1]&.html_safe
+          elsif diff_line.removed?
+            old_lines[diff_line.old_pos - 1]&.html_safe
+          end
 
         # Only update text if line is found. This will prevent
         # issues with submodules given the line only exists in diff content.
-        "#{line_prefix}#{rich_line}".html_safe if rich_line
+        if rich_line
+          line_prefix = diff_line.text =~ /\A(.)/ ? $1 : ' '
+          "#{line_prefix}#{rich_line}".html_safe
+        end
       end
 
       def inline_diffs
@@ -57,20 +68,18 @@ module Gitlab
       end
 
       def old_lines
-        return unless diff_file
-        @old_lines ||= Gitlab::Highlight.highlight_lines(*processing_args(:old))
+        @old_lines ||= highlighted_blob_lines(diff_file.old_blob)
       end
 
       def new_lines
-        return unless diff_file
-        @new_lines ||= Gitlab::Highlight.highlight_lines(*processing_args(:new))
+        @new_lines ||= highlighted_blob_lines(diff_file.new_blob)
       end
 
-      def processing_args(version)
-        ref  = send("diff_#{version}_ref")
-        path = send("diff_#{version}_path")
+      def highlighted_blob_lines(blob)
+        return [] unless blob
 
-        [ref.project.repository, ref.id, path]
+        blob.load_all_data!
+        Gitlab::Highlight.highlight(blob.path, blob.data, repository: repository).lines
       end
     end
   end

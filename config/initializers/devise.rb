@@ -24,7 +24,7 @@ Devise.setup do |config|
   # session. If you need permissions, you should implement that in a before filter.
   # You can also supply a hash where the value is a boolean determining whether
   # or not authentication should be aborted when the value is not present.
-  config.authentication_keys = [ :login ]
+  config.authentication_keys = [:login]
 
   # Configure parameters from the request object used for authentication. Each entry
   # given should be a request method and it will automatically be passed to the
@@ -36,12 +36,12 @@ Devise.setup do |config|
   # Configure which authentication keys should be case-insensitive.
   # These keys will be downcased upon creating or modifying a user and when used
   # to authenticate or find a user. Default is :email.
-  config.case_insensitive_keys = [ :email ]
+  config.case_insensitive_keys = [:email, :email_confirmation]
 
   # Configure which authentication keys should have whitespace stripped.
   # These keys will have whitespace before and after removed upon creating or
   # modifying a user and when used to authenticate or find a user. Default is :email.
-  config.strip_whitespace_keys = [ :email ]
+  config.strip_whitespace_keys = [:email]
 
   # Tell if authentication through request.params is enabled. True by default.
   # config.params_authenticatable = true
@@ -100,6 +100,9 @@ Devise.setup do |config|
   # secure: true in order to force SSL only cookies.
   # config.cookie_options = {}
 
+  # Send a notification email when the user's password is changed
+  config.send_password_change_notification = true
+
   # ==> Configuration for :validatable
   # Range for password length. Default is 6..128.
   config.password_length = 8..128
@@ -121,7 +124,7 @@ Devise.setup do |config|
   config.lock_strategy = :failed_attempts
 
   # Defines which key will be used when locking and unlocking an account
-  config.unlock_keys = [ :email ]
+  config.unlock_keys = [:email]
 
   # Defines which strategy will be used to unlock an account.
   # :email = Sends an unlock link to the user email
@@ -172,7 +175,7 @@ Devise.setup do |config|
 
   # Configure the default scope given to Warden. By default it's the first
   # devise role declared in your routes (usually :user).
-  # config.default_scope = :user
+  config.default_scope = :user  # now have an :email scope as well, so set the default
 
   # Configure sign_out behavior.
   # Sign_out action can be scoped (i.e. /users/sign_out affects only :user scope).
@@ -189,10 +192,10 @@ Devise.setup do |config|
   #
   # The :"*/*" and "*/*" formats below is required to match Internet
   # Explorer requests.
-  # config.navigational_formats = [:"*/*", "*/*", :html]
+  config.navigational_formats = [:"*/*", "*/*", :html, :zip]
 
   # The default HTTP method used to sign out a resource. Default is :delete.
-  config.sign_out_via = :delete
+  config.sign_out_via = :get
 
   # ==> OmniAuth
   # To configure a new OmniAuth provider copy and edit omniauth.rb.sample
@@ -203,39 +206,20 @@ Devise.setup do |config|
   # If you want to use other strategies, that are not supported by Devise, or
   # change the failure app, you can configure them inside the config.warden block.
   #
+  # config.warden do |manager|
+  #   manager.failure_app = Gitlab::DeviseFailure
+  #   manager.intercept_401 = false
+  #   manager.default_strategies(scope: :user).unshift :some_external_strategy
+  # end
 
-  config.warden do |manager|
-    manager.intercept_401 = false
-    manager.strategies.add(:sandstorm, Devise::Strategies::Sandstorm)
-    manager.default_strategies(scope: :user).unshift :sandstorm
+  if Gitlab::Auth::LDAP::Config.enabled?
+    Gitlab::Auth::LDAP::Config.providers.each do |provider|
+      ldap_config = Gitlab::Auth::LDAP::Config.new(provider)
+      config.omniauth(provider, ldap_config.omniauth_options)
+    end
   end
 
-  Gitlab.config.omniauth.providers.each do |provider|
-    provider_arguments = []
-
-    %w[app_id app_secret].each do |argument|
-      provider_arguments << provider[argument] if provider[argument]
-    end
-
-    case provider['args']
-    when Array
-      # An Array from the configuration will be expanded.
-      provider_arguments.concat provider['args']
-    when Hash
-      # Add procs for handling SLO
-      if provider['name'] == 'cas3'
-        provider['args'][:on_single_sign_out]  = lambda do |request|
-          ticket = request.params[:session_index]
-          raise "Service Ticket not found." unless Gitlab::OAuth::Session.valid?(:cas3, ticket)
-          Gitlab::OAuth::Session.destroy(:cas3, ticket)
-          true
-        end
-      end
-
-      # A Hash from the configuration will be passed as is.
-      provider_arguments << provider['args'].symbolize_keys
-    end
-
-    config.omniauth provider['name'].to_sym, *provider_arguments
+  if Gitlab::Auth.omniauth_enabled?
+    Gitlab::OmniauthInitializer.new(config).execute(Gitlab.config.omniauth.providers)
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Search
   class ProjectService
     attr_accessor :project, :current_user, :params
@@ -11,6 +13,10 @@ module Search
                                        project,
                                        params[:search],
                                        params[:repository_ref])
+    end
+
+    def scope
+      @scope ||= %w[notes issues merge_requests milestones wiki_blobs commits].delete(params[:scope]) { 'blobs' }
     end
   end
 end

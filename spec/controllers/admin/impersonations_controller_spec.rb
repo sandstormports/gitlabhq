@@ -22,7 +22,7 @@ describe Admin::ImpersonationsController do
         it "responds with status 404" do
           delete :destroy
 
-          expect(response.status).to eq(404)
+          expect(response).to have_gitlab_http_status(404)
         end
 
         it "doesn't sign us in" do
@@ -46,7 +46,7 @@ describe Admin::ImpersonationsController do
           it "responds with status 404" do
             delete :destroy
 
-            expect(response.status).to eq(404)
+            expect(response).to have_gitlab_http_status(404)
           end
 
           it "doesn't sign us in as the impersonator" do
@@ -65,7 +65,7 @@ describe Admin::ImpersonationsController do
             it "responds with status 404" do
               delete :destroy
 
-              expect(response.status).to eq(404)
+              expect(response).to have_gitlab_http_status(404)
             end
 
             it "doesn't sign us in as the impersonator" do
@@ -76,16 +76,32 @@ describe Admin::ImpersonationsController do
           end
 
           context "when the impersonator is not blocked" do
-            it "redirects to the impersonated user's page" do
-              delete :destroy
+            shared_examples_for "successfully stops impersonating" do
+              it "redirects to the impersonated user's page" do
+                expect(Gitlab::AppLogger).to receive(:info).with("User #{impersonator.username} has stopped impersonating #{user.username}").and_call_original
 
-              expect(response).to redirect_to(admin_user_path(user))
+                delete :destroy
+
+                expect(response).to redirect_to(admin_user_path(user))
+              end
+
+              it "signs us in as the impersonator" do
+                delete :destroy
+
+                expect(warden.user).to eq(impersonator)
+              end
             end
 
-            it "signs us in as the impersonator" do
-              delete :destroy
+            # base case
+            it_behaves_like "successfully stops impersonating"
 
-              expect(warden.user).to eq(impersonator)
+            context "and the user has a temporary oauth e-mail address" do
+              before do
+                allow(user).to receive(:temp_oauth_email?).and_return(true)
+                allow(controller).to receive(:current_user).and_return(user)
+              end
+
+              it_behaves_like "successfully stops impersonating"
             end
           end
         end

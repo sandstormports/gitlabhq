@@ -1,3 +1,5 @@
+require 'fileutils'
+
 module Gitlab
   module Gfm
     ##
@@ -19,11 +21,10 @@ module Gitlab
 
         @text.gsub(@pattern) do |markdown|
           file = find_file(@source_project, $~[:secret], $~[:file])
-          return markdown unless file.try(:exists?)
+          break markdown unless file.try(:exists?)
 
-          new_uploader = FileUploader.new(target_project)
-          new_uploader.store!(file)
-          new_uploader.to_markdown
+          moved = FileUploader.copy_to(file, target_project)
+          moved.markdown_link
         end
       end
 
@@ -42,9 +43,9 @@ module Gitlab
       private
 
       def find_file(project, secret, file)
-        uploader = FileUploader.new(project, secret)
+        uploader = FileUploader.new(project, secret: secret)
         uploader.retrieve_from_store!(file)
-        uploader.file
+        uploader
       end
     end
   end

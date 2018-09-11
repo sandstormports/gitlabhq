@@ -4,7 +4,8 @@ class Admin::AppearancesController < Admin::ApplicationController
   def show
   end
 
-  def preview
+  def preview_sign_in
+    render 'preview_sign_in', layout: 'devise'
   end
 
   def create
@@ -40,18 +41,37 @@ class Admin::AppearancesController < Admin::ApplicationController
     redirect_to admin_appearances_path, notice: 'Header logo was succesfully removed.'
   end
 
+  def favicon
+    @appearance.remove_favicon!
+    @appearance.save
+
+    redirect_to admin_appearances_path, notice: 'Favicon was succesfully removed.'
+  end
+
   private
 
   # Use callbacks to share common setup or constraints between actions.
   def set_appearance
-    @appearance = Appearance.last || Appearance.new
+    @appearance = Appearance.current || Appearance.new
   end
 
   # Only allow a trusted parameter "white list" through.
   def appearance_params
-    params.require(:appearance).permit(
-      :title, :description, :logo, :logo_cache, :header_logo, :header_logo_cache,
-      :updated_by
-    )
+    params.require(:appearance).permit(allowed_appearance_params)
+  end
+
+  def allowed_appearance_params
+    %i[
+      title
+      description
+      logo
+      logo_cache
+      header_logo
+      header_logo_cache
+      favicon
+      favicon_cache
+      new_project_guidelines
+      updated_by
+    ]
   end
 end

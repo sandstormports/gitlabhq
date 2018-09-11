@@ -1,33 +1,40 @@
 require 'spec_helper'
 
 describe 'Commits' do
-  include CiStatusHelper
-
-  let(:project) { create(:project) }
+  let(:project) { create(:project, :repository) }
+  let(:user) { create(:user) }
 
   describe 'CI' do
     before do
-      login_as :user
-      stub_ci_commit_to_return_yaml_file
+      sign_in(user)
+      stub_ci_pipeline_to_return_yaml_file
     end
 
-    let!(:commit) do
-      FactoryGirl.create :ci_commit, project: project, sha: project.commit.sha
+    let(:creator) { create(:user) }
+
+    let!(:pipeline) do
+      create(:ci_pipeline,
+             project: project,
+             user: creator,
+             ref: project.default_branch,
+             sha: project.commit.sha,
+             status: :success,
+             created_at: 5.months.ago)
     end
 
     context 'commit status is Generic Commit Status' do
-      let!(:status) { FactoryGirl.create :generic_commit_status, commit: commit }
+      let!(:status) { create(:generic_commit_status, pipeline: pipeline) }
 
       before do
-        project.team << [@user, :reporter]
+        project.add_reporter(user)
       end
 
       describe 'Commit builds' do
         before do
-          visit ci_status_path(commit)
+          visit pipeline_path(pipeline)
         end
 
-        it { expect(page).to have_content commit.sha[0..7] }
+        it { expect(page).to have_content pipeline.sha[0..7] }
 
         it 'contains generic commit status build' do
           page.within('.table-holder') do
@@ -39,60 +46,71 @@ describe 'Commits' do
     end
 
     context 'commit status is Ci Build' do
-      let!(:build) { FactoryGirl.create :ci_build, commit: commit }
-      let(:artifacts_file) { fixture_file_upload(Rails.root + 'spec/fixtures/banana_sample.gif', 'image/gif') }
+      let!(:build) { create(:ci_build, pipeline: pipeline) }
+      let(:artifacts_file) { fixture_file_upload('spec/fixtures/banana_sample.gif', 'image/gif') }
 
       context 'when logged as developer' do
         before do
-          project.team << [@user, :developer]
+          project.add_developer(user)
         end
 
         describe 'Project commits' do
-          before do
-            visit namespace_project_commits_path(project.namespace, project, :master)
+          let!(:pipeline_from_other_branch) do
+            create(:ci_pipeline,
+                   project: project,
+                   ref: 'fix',
+                   sha: project.commit.sha,
+                   status: :failed)
           end
 
-          it 'should show build status' do
-            page.within("//li[@id='commit-#{commit.short_sha}']") do
-              expect(page).to have_css(".ci-status-link")
+          before do
+            visit project_commits_path(project, :master)
+          end
+
+          it 'shows correct build status from default branch' do
+            page.within("//li[@id='commit-#{pipeline.short_sha}']") do
+              expect(page).to have_css('.ci-status-link')
+              expect(page).to have_css('.ci-status-icon-success')
             end
           end
         end
 
-        describe 'Commit builds' do
+        describe 'Commit builds', :js do
           before do
-            visit ci_status_path(commit)
+            visit pipeline_path(pipeline)
           end
 
-          it { expect(page).to have_content commit.sha[0..7] }
-          it { expect(page).to have_content commit.git_commit_message }
-          it { expect(page).to have_content commit.git_author_name }
+          it 'shows pipeline`s data' do
+            expect(page).to have_content pipeline.sha[0..7]
+            expect(page).to have_content pipeline.git_commit_message
+            expect(page).to have_content pipeline.user.name
+          end
         end
 
         context 'Download artifacts' do
           before do
-            build.update_attributes(artifacts_file: artifacts_file)
+            build.update(legacy_artifacts_file: artifacts_file)
           end
 
           it do
-            visit ci_status_path(commit)
+            visit pipeline_path(pipeline)
             click_on 'Download artifacts'
             expect(page.response_headers['Content-Type']).to eq(artifacts_file.content_type)
           end
         end
 
         describe 'Cancel all builds' do
-          it 'cancels commit' do
-            visit ci_status_path(commit)
+          it 'cancels commit', :js do
+            visit pipeline_path(pipeline)
             click_on 'Cancel running'
             expect(page).to have_content 'canceled'
           end
         end
 
         describe 'Cancel build' do
-          it 'cancels build' do
-            visit ci_status_path(commit)
-            click_on 'Cancel'
+          it 'cancels build', :js do
+            visit pipeline_path(pipeline)
+            find('.js-btn-cancel-pipeline').click
             expect(page).to have_content 'canceled'
           end
         end
@@ -100,13 +118,13 @@ describe 'Commits' do
         describe '.gitlab-ci.yml not found warning' do
           context 'ci builds enabled' do
             it "does not show warning" do
-              visit ci_status_path(commit)
+              visit pipeline_path(pipeline)
               expect(page).not_to have_content '.gitlab-ci.yml not found in this commit'
             end
 
             it 'shows warning' do
-              stub_ci_commit_yaml_file(nil)
-              visit ci_status_path(commit)
+              stub_ci_pipeline_yaml_file(nil)
+              visit pipeline_path(pipeline)
               expect(page).to have_content '.gitlab-ci.yml not found in this commit'
             end
           end
@@ -114,8 +132,8 @@ describe 'Commits' do
           context 'ci builds disabled' do
             before do
               stub_ci_builds_disabled
-              stub_ci_commit_yaml_file(nil)
-              visit ci_status_path(commit)
+              stub_ci_pipeline_yaml_file(nil)
+              visit pipeline_path(pipeline)
             end
 
             it 'does not show warning' do
@@ -127,39 +145,67 @@ describe 'Commits' do
 
       context "when logged as reporter" do
         before do
-          project.team << [@user, :reporter]
-          build.update_attributes(artifacts_file: artifacts_file)
-          visit ci_status_path(commit)
+          project.add_reporter(user)
+          build.update(legacy_artifacts_file: artifacts_file)
+          visit pipeline_path(pipeline)
+        end
+
+        it 'Renders header', :js do
+          expect(page).to have_content pipeline.sha[0..7]
+          expect(page).to have_content pipeline.git_commit_message
+          expect(page).to have_content pipeline.user.name
+          expect(page).not_to have_link('Cancel running')
+          expect(page).not_to have_link('Retry')
         end
 
         it do
-          expect(page).to have_content commit.sha[0..7]
-          expect(page).to have_content commit.git_commit_message
-          expect(page).to have_content commit.git_author_name
           expect(page).to have_link('Download artifacts')
-          expect(page).to_not have_link('Cancel running')
-          expect(page).to_not have_link('Retry failed')
         end
       end
 
-      context 'when accessing internal project with disallowed access' do
+      context 'when accessing internal project with disallowed access', :js do
         before do
           project.update(
             visibility_level: Gitlab::VisibilityLevel::INTERNAL,
             public_builds: false)
-          build.update_attributes(artifacts_file: artifacts_file)
-          visit ci_status_path(commit)
+          build.update(legacy_artifacts_file: artifacts_file)
+          visit pipeline_path(pipeline)
         end
 
         it do
-          expect(page).to have_content commit.sha[0..7]
-          expect(page).to have_content commit.git_commit_message
-          expect(page).to have_content commit.git_author_name
-          expect(page).to_not have_link('Download artifacts')
-          expect(page).to_not have_link('Cancel running')
-          expect(page).to_not have_link('Retry failed')
+          expect(page).to have_content pipeline.sha[0..7]
+          expect(page).to have_content pipeline.git_commit_message
+          expect(page).to have_content pipeline.user.name
+
+          expect(page).not_to have_link('Cancel running')
+          expect(page).not_to have_link('Retry')
         end
       end
+    end
+  end
+
+  context 'viewing commits for a branch' do
+    let(:branch_name) { 'master' }
+
+    before do
+      project.add_maintainer(user)
+      sign_in(user)
+      visit project_commits_path(project, branch_name)
+    end
+
+    it 'includes the committed_date for each commit' do
+      commits = project.repository.commits(branch_name, limit: 40)
+
+      commits.each do |commit|
+        expect(page).to have_content("authored #{commit.authored_date.strftime("%b %d, %Y")}")
+      end
+    end
+
+    it 'shows the ref switcher with the multi-file editor enabled', :js do
+      set_cookie('new_repo', 'true')
+      visit project_commits_path(project, branch_name)
+
+      expect(find('.js-project-refs-dropdown')).to have_content branch_name
     end
   end
 end

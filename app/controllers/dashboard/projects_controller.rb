@@ -1,55 +1,19 @@
 class Dashboard::ProjectsController < Dashboard::ApplicationController
-  include FilterProjects
+  include ParamsBackwardCompatibility
+  include RendersMemberAccess
 
-  before_action :event_filter
+  before_action :set_non_archived_param
+  before_action :default_sorting
+  skip_cross_project_access_check :index, :starred
 
   def index
-    # begin sandstorm logic for creating automatically creating a repo
-    if current_user
-      g = Group.where(name: "gitlab").first
-      if !g
-        g = Group.new(name: "gitlab", path:"gitlab")
-        if g.save
-          g.add_owner(current_user)
-        else
-          Rails.logger.error "failed to create gitlab group"
-        end
-      end
-
-      p = Project.where(name: "repo").first
-      if !p
-        p = ::Projects::CreateService.new(current_user, name: "repo", path: "repo", namespace_id: g.id).execute
-      end
-
-      if p.visibility_level != 0
-        p.visibility_level = 0
-        p.save
-      end
-
-      if p.builds_enabled
-        p.builds_enabled = false
-        p.save
-      end
-
-      redirect_to project_path(p)
-      return
-    end
-    # end sandstorm logic
-
-    @projects = current_user.authorized_projects.sorted_by_activity
-    @projects = filter_projects(@projects)
-    @projects = @projects.includes(:namespace)
-    @projects = @projects.sort(@sort = params[:sort])
-    @projects = @projects.page(params[:page])
-
-    @last_push = current_user.recent_push
+    @projects = load_projects(params.merge(non_public: true))
 
     respond_to do |format|
       format.html
       format.atom do
-        event_filter
         load_events
-        render layout: false
+        render layout: 'xml.atom'
       end
       format.json do
         render json: {
@@ -60,18 +24,13 @@ class Dashboard::ProjectsController < Dashboard::ApplicationController
   end
 
   def starred
-    @projects = current_user.starred_projects.sorted_by_activity
-    @projects = filter_projects(@projects)
-    @projects = @projects.includes(:namespace, :forked_from_project, :tags)
-    @projects = @projects.sort(@sort = params[:sort])
-    @projects = @projects.page(params[:page])
+    @projects = load_projects(params.merge(starred: true))
+      .includes(:forked_from_project, :tags)
 
-    @last_push = current_user.recent_push
     @groups = []
 
     respond_to do |format|
       format.html
-
       format.json do
         render json: {
           html: view_to_html_string("dashboard/projects/_projects", locals: { projects: @projects })
@@ -82,9 +41,28 @@ class Dashboard::ProjectsController < Dashboard::ApplicationController
 
   private
 
+  def default_sorting
+    params[:sort] ||= 'latest_activity_desc'
+    @sort = params[:sort]
+  end
+
+  def load_projects(finder_params)
+    projects = ProjectsFinder
+                .new(params: finder_params, current_user: current_user)
+                .execute
+                .includes(:route, :creator, namespace: [:route, :owner])
+                .page(finder_params[:page])
+
+    prepare_projects_for_rendering(projects)
+  end
+
   def load_events
-    @events = Event.in_projects(@projects)
-    @events = @event_filter.apply_filter(@events).with_associations
-    @events = @events.limit(20).offset(params[:offset] || 0)
+    projects = load_projects(params.merge(non_public: true))
+
+    @events = EventCollection
+      .new(projects, offset: params[:offset].to_i, filter: event_filter)
+      .to_a
+
+    Events::RenderService.new(current_user).execute(@events, atom_request: request.format.atom?)
   end
 end

@@ -1,67 +1,77 @@
-%p.lead.prepend-top-default
-  %span
-    To register a new runner you should enter the following registration token.
-    With this token the runner will request a unique runner token and use that for future communication.
-    Registration token is
-    %code{ id: 'runners-token' } #{current_application_settings.runners_registration_token}
+- breadcrumb_title "Runners"
+- @no_container = true
 
-.bs-callout.clearfix
-  .pull-left
+%div{ class: container_class }
+  .bs-callout
     %p
-      You can reset runners registration token by pressing a button below.
-    %p
-      = button_to reset_runners_token_admin_application_settings_path,
-        method: :put, class: 'btn btn-default',
-        data: { confirm: 'Are you sure you want to reset registration token?' } do
-        = icon('refresh')
-        Reset runners registration token
+      A 'Runner' is a process which runs a job.
+      You can setup as many Runners as you need.
+      %br
+      Runners can be placed on separate users, servers, even on your local machine.
+      %br
 
-.bs-callout
-  %p
-    A 'runner' is a process which runs a build.
-    You can setup as many runners as you need.
-    %br
-    Runners can be placed on separate users, servers, and even on your local machine.
-    %br
+    %div
+      %span Each Runner can be in one of the following states:
+      %ul
+        %li
+          %span.badge.badge-success shared
+          \- Runner runs jobs from all unassigned projects
+        %li
+          %span.badge.badge-success group
+          \- Runner runs jobs from all unassigned projects in its group
+        %li
+          %span.badge.badge-info specific
+          \- Runner runs jobs from assigned projects
+        %li
+          %span.badge.badge-warning locked
+          \- Runner cannot be assigned to other projects
+        %li
+          %span.badge.badge-danger paused
+          \- Runner will not receive any new jobs
 
-  %div
-    %span Each runner can be in one of the following states:
-    %ul
-      %li
-        %span.label.label-success shared
-        \- run builds from all unassigned projects
-      %li
-        %span.label.label-info specific
-        \- run builds from assigned projects
-      %li
-        %span.label.label-danger paused
-        \- runner will not receive any new builds
+  .bs-callout.clearfix
+    .float-left
+      %p
+        You can reset runners registration token by pressing a button below.
+      .prepend-top-10
+        = button_to _("Reset runners registration token"), reset_runners_token_admin_application_settings_path,
+          method: :put, class: 'btn btn-default',
+          data: { confirm: _("Are you sure you want to reset registration token?") }
 
-.append-bottom-20.clearfix
-  .pull-left
-    = form_tag admin_runners_path, id: 'runners-search', class: 'form-inline', method: :get do
-      .form-group
-        = search_field_tag :search, params[:search], class: 'form-control', placeholder: 'Runner description or token', spellcheck: false
-      = submit_tag 'Search', class: 'btn'
+  = render partial: 'ci/runner/how_to_setup_shared_runner',
+           locals: { registration_token: Gitlab::CurrentSettings.runners_registration_token }
 
-  .pull-right.light
-    Runners with last contact less than a minute ago: #{@active_runners_cnt}
+  .append-bottom-20.clearfix
+    .float-left
+      = form_tag admin_runners_path, id: 'runners-search', class: 'form-inline', method: :get do
+        .form-group
+          = search_field_tag :search, params[:search], class: 'form-control input-short', placeholder: 'Runner description or token', spellcheck: false
+        = submit_tag 'Search', class: 'btn'
 
-%br
+    .float-right.light
+      Runners with last contact more than a minute ago: #{@active_runners_cnt}
 
-.table-holder
-  %table.table
-    %thead
-      %tr
-        %th Type
-        %th Runner token
-        %th Description
-        %th Projects
-        %th Builds
-        %th Tags
-        %th Last contact
-        %th
+  %br
 
-    - @runners.each do |runner|
-      = render "admin/runners/runner", runner: runner
-= paginate @runners
+  - if @runners.any?
+    .runners-content
+      .table-holder
+        %table.table
+          %thead
+            %tr
+              %th Type
+              %th Runner token
+              %th Description
+              %th Version
+              %th IP Address
+              %th Projects
+              %th Jobs
+              %th Tags
+              %th= link_to 'Last contact', admin_runners_path(safe_params.slice(:search).merge(sort: 'contacted_asc'))
+              %th
+
+          - @runners.each do |runner|
+            = render "admin/runners/runner", runner: runner
+      = paginate @runners, theme: "gitlab"
+  - else
+    .nothing-here-block No runners found

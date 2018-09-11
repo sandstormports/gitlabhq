@@ -1,21 +1,18 @@
-.panel.panel-default
-  .panel-heading
-    %strong #{@project.name}
-    project members
-    %small
-      (#{members.count})
-    .controls
-      = form_tag namespace_project_project_members_path(@project.namespace, @project), method: :get, class: 'form-inline member-search-form'  do
-        .form-group
-          = search_field_tag :search, params[:search], { placeholder: 'Find existing member by name', class: 'form-control', spellcheck: false }
-        = button_tag class: 'btn', title: 'Search' do
-          = icon("search")
-  %ul.content-list
-    - members.each do |project_member|
-      = render 'project_member', member: project_member
+- project = local_assigns.fetch(:project)
+- members = local_assigns.fetch(:members)
 
-:javascript
-  $('form.member-search-form').on('submit', function (event) {
-    event.preventDefault();
-    Turbolinks.visit(this.action + '?' + $(this).serialize());
-  });
+.card
+  .card-header.flex-project-members-panel
+    %span.flex-project-title
+      Members of
+      %strong= project.name
+    %span.badge.badge-pill= members.total_count
+    = form_tag project_project_members_path(project), method: :get, class: 'form-inline member-search-form flex-project-members-form'  do
+      .form-group
+        .position-relative
+          = search_field_tag :search, params[:search], { placeholder: 'Find existing members by name', class: 'form-control', spellcheck: false }
+          %button.member-search-btn{ type: "submit", "aria-label" => "Submit search" }
+            = icon("search")
+        = render 'shared/members/sort_dropdown'
+  %ul.content-list.members-list
+    = render partial: 'shared/members/member', collection: members, as: :member

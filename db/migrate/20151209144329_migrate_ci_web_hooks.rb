@@ -1,5 +1,5 @@
 class MigrateCiWebHooks < ActiveRecord::Migration
-  include Gitlab::Database
+  include Gitlab::Database::MigrationHelpers
 
   def up
     execute(

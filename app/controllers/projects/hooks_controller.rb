@@ -1,40 +1,46 @@
 class Projects::HooksController < Projects::ApplicationController
+  include HooksExecution
+
   # Authorize
   before_action :authorize_admin_project!
+  before_action :hook_logs, only: :edit
 
   respond_to :html
 
   layout "project_settings"
 
   def index
-    @hooks = @project.hooks
-    @hook = ProjectHook.new
+    redirect_to project_settings_integrations_path(@project)
   end
 
   def create
     @hook = @project.hooks.new(hook_params)
     @hook.save
 
-    if @hook.valid?
-      redirect_to namespace_project_hooks_path(@project.namespace, @project)
-    else
+    unless @hook.valid?
       @hooks = @project.hooks.select(&:persisted?)
-      render :index
+      flash[:alert] = @hook.errors.full_messages.join.html_safe
+    end
+
+    redirect_to project_settings_integrations_path(@project)
+  end
+
+  def edit
+  end
+
+  def update
+    if hook.update(hook_params)
+      flash[:notice] = 'Hook was successfully updated.'
+      redirect_to project_settings_integrations_path(@project)
+    else
+      render 'edit'
     end
   end
 
   def test
-    if !@project.empty_repo?
-      status, message = TestHookService.new.execute(hook, current_user)
+    result = TestHooks::ProjectService.new(hook, current_user, params[:trigger]).execute
 
-      if status
-        flash[:notice] = 'Hook successfully executed.'
-      else
-        flash[:alert] = "Hook execution failed: #{message}"
-      end
-    else
-      flash[:alert] = 'Hook execution failed. Ensure the project has commits.'
-    end
+    set_hook_execution_notice(result)
 
     redirect_back_or_default(default: { action: 'index' })
   end
@@ -42,7 +48,7 @@ class Projects::HooksController < Projects::ApplicationController
   def destroy
     hook.destroy
 
-    redirect_to namespace_project_hooks_path(@project.namespace, @project)
+    redirect_to project_settings_integrations_path(@project), status: :found
   end
 
   private
@@ -51,9 +57,16 @@ class Projects::HooksController < Projects::ApplicationController
     @hook ||= @project.hooks.find(params[:id])
   end
 
+  def hook_logs
+    @hook_logs ||= hook.web_hook_logs.recent.page(params[:page])
+  end
+
   def hook_params
-    params.require(:hook).permit(:url, :push_events, :issues_events,
-      :merge_requests_events, :tag_push_events, :note_events,
-      :build_events, :enable_ssl_verification)
+    params.require(:hook).permit(
+      :enable_ssl_verification,
+      :token,
+      :url,
+      *ProjectHook.triggers.values
+    )
   end
 end

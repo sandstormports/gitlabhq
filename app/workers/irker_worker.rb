@@ -1,8 +1,10 @@
+# frozen_string_literal: true
+
 require 'json'
 require 'socket'
 
 class IrkerWorker
-  include Sidekiq::Worker
+  include ApplicationWorker
 
   def perform(project_id, chans, colors, push_data, settings)
     project = Project.find(project_id)
@@ -65,12 +67,12 @@ class IrkerWorker
   end
 
   def send_new_branch(project, repo_name, committer, branch)
-    repo_path = project.path_with_namespace
+    repo_path = project.full_path
     newbranch = "#{Gitlab.config.gitlab.url}/#{repo_path}/branches"
     newbranch = "\x0302\x1f#{newbranch}\x0f" if @colors
 
-    privmsg = "[#{repo_name}] #{committer} has created a new branch "
-    privmsg += "#{branch}: #{newbranch}"
+    privmsg = "[#{repo_name}] #{committer} has created a new branch " \
+              "#{branch}: #{newbranch}"
     sendtoirker privmsg
   end
 
@@ -103,32 +105,31 @@ class IrkerWorker
     parents = commit.parents
     # Return old value if there's no new one
     return push_data['before'] if parents.empty?
+
     # Or return the first parent-commit
     parents[0].id
   end
 
   def send_commits_count(data, project, repo, committer, branch)
-    url = compare_url data, project.path_with_namespace
+    url = compare_url data, project.full_path
     commits = colorize_commits data['total_commits_count']
 
-    new_commits = 'new commit'
-    new_commits += 's' if data['total_commits_count'] > 1
-
+    new_commits = 'new commit'.pluralize(data['total_commits_count'])
     sendtoirker "[#{repo}] #{committer} pushed #{commits} #{new_commits} " \
                 "to #{branch}: #{url}"
   end
 
   def compare_url(data, repo_path)
-    sha1 = Commit::truncate_sha(data['before'])
-    sha2 = Commit::truncate_sha(data['after'])
-    compare_url = "#{Gitlab.config.gitlab.url}/#{repo_path}/compare"
-    compare_url += "/#{sha1}...#{sha2}"
+    sha1 = Commit.truncate_sha(data['before'])
+    sha2 = Commit.truncate_sha(data['after'])
+    compare_url = "#{Gitlab.config.gitlab.url}/#{repo_path}/compare" \
+                  "/#{sha1}...#{sha2}"
     colorize_url compare_url
   end
 
   def send_one_commit(project, hook_attrs, repo_name, branch)
     commit = commit_from_id project, hook_attrs['id']
-    sha = colorize_sha Commit::truncate_sha(hook_attrs['id'])
+    sha = colorize_sha Commit.truncate_sha(hook_attrs['id'])
     author = hook_attrs['author']['name']
     files = colorize_nb_files(files_count commit)
     title = commit.title
@@ -141,8 +142,9 @@ class IrkerWorker
   end
 
   def files_count(commit)
-    files = "#{commit.diffs.real_size} file"
-    files += 's' if commit.diffs.count > 1
+    diff_size = commit.raw_deltas.size
+
+    files = "#{diff_size} file".pluralize(diff_size)
     files
   end
 

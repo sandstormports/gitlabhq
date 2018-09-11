@@ -18,6 +18,7 @@ module Gitlab
 
       def execute
         return true unless repo.valid?
+
         client = Gitlab::FogbugzImport::Client.new(token: fb_session[:token], uri: fb_session[:uri])
 
         @cases = client.cases(@repo.id.to_i)
@@ -74,8 +75,8 @@ module Gitlab
       end
 
       def create_label(name)
-        color = nice_label_color(name)
-        Label.create!(project_id: project.id, title: name, color: color)
+        params = { title: name, color: nice_label_color(name) }
+        ::Labels::FindOrCreateService.new(nil, project, params).execute(skip_authorization: true)
       end
 
       def user_info(person_id)
@@ -111,6 +112,7 @@ module Gitlab
           [bug['sCategory'], bug['sPriority']].each do |label|
             unless label.blank?
               labels << label
+
               unless @known_labels.include?(label)
                 create_label(label)
                 @known_labels << label
@@ -122,25 +124,21 @@ module Gitlab
           author_id = user_info(bug['ixPersonOpenedBy'])[:gitlab_id] || project.creator_id
 
           issue = Issue.create!(
+            iid:          bug['ixBug'],
             project_id:   project.id,
             title:        bug['sTitle'],
             description:  body,
             author_id:    author_id,
-            assignee_id:  assignee_id,
-            state:        bug['fOpen'] == 'true' ? 'opened' : 'closed'
+            assignee_ids: [assignee_id],
+            state:        bug['fOpen'] == 'true' ? 'opened' : 'closed',
+            created_at:   date,
+            updated_at:   DateTime.parse(bug['dtLastUpdated'])
           )
-          issue.add_labels_by_names(labels)
 
-          if issue.iid != bug['ixBug']
-            issue.update_attribute(:iid, bug['ixBug'])
-          end
+          issue_labels = ::LabelsFinder.new(nil, project_id: project.id, title: labels).execute(skip_authorization: true)
+          issue.update_attribute(:label_ids, issue_labels.pluck(:id))
 
           import_issue_comments(issue, comments)
-
-          issue.update_attribute(:created_at, date)
-
-          last_update = DateTime.parse(bug['dtLastUpdated'])
-          issue.update_attribute(:updated_at, last_update)
         end
       end
 
@@ -193,23 +191,24 @@ module Gitlab
         end
       end
 
-      def linkify_issues(s)
-        s = s.gsub(/([Ii]ssue) ([0-9]+)/, '\1 #\2')
-        s = s.gsub(/([Cc]ase) ([0-9]+)/, '\1 #\2')
-        s
+      def linkify_issues(str)
+        str = str.gsub(/([Ii]ssue) ([0-9]+)/, '\1 #\2')
+        str = str.gsub(/([Cc]ase) ([0-9]+)/, '\1 #\2')
+        str
       end
 
-      def escape_for_markdown(s)
-        s = s.gsub(/^#/, "\\#")
-        s = s.gsub(/^-/, "\\-")
-        s = s.gsub("`", "\\~")
-        s = s.delete("\r")
-        s = s.gsub("\n", "  \n")
-        s
+      def escape_for_markdown(str)
+        str = str.gsub(/^#/, "\\#")
+        str = str.gsub(/^-/, "\\-")
+        str = str.gsub("`", "\\~")
+        str = str.delete("\r")
+        str = str.gsub("\n", "  \n")
+        str
       end
 
       def format_content(raw_content)
         return raw_content if raw_content.nil?
+
         linkify_issues(escape_for_markdown(raw_content))
       end
 
@@ -267,6 +266,7 @@ module Gitlab
         if content.blank?
           content = '*(No description has been entered for this issue)*'
         end
+
         body << content
 
         body.join("\n\n")
@@ -280,6 +280,7 @@ module Gitlab
         if content.blank?
           content = "*(No comment has been entered for this change)*"
         end
+
         body << content
 
         if updates.any?

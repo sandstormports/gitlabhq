@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Notes
   class PostProcessService
     attr_accessor :note
@@ -8,21 +10,28 @@ module Notes
 
     def execute
       # Skip system notes, like status changes and cross-references and awards
-      unless @note.system || @note.is_award
+      unless @note.system?
         EventCreateService.new.leave_note(@note, @note.author)
+
+        return if @note.for_personal_snippet?
+
         @note.create_cross_references!
         execute_note_hooks
       end
     end
 
     def hook_data
-      Gitlab::NoteDataBuilder.build(@note, @note.author)
+      Gitlab::DataBuilder::Note.build(@note, @note.author)
     end
 
     def execute_note_hooks
+      return unless @note.project
+
       note_data = hook_data
-      @note.project.execute_hooks(note_data, :note_hooks)
-      @note.project.execute_services(note_data, :note_hooks)
+      hooks_scope = @note.confidential? ? :confidential_note_hooks : :note_hooks
+
+      @note.project.execute_hooks(note_data, hooks_scope)
+      @note.project.execute_services(note_data, hooks_scope)
     end
   end
 end

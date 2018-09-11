@@ -1,45 +1,103 @@
 require 'addressable/uri'
 
 class Projects::CompareController < Projects::ApplicationController
+  include DiffForPath
   include DiffHelper
+  include RendersCommits
 
   # Authorize
   before_action :require_non_empty_project
   before_action :authorize_download_code!
-  before_action :assign_ref_vars, only: [:index, :show]
+  # Defining ivars
+  before_action :define_diffs, only: [:show, :diff_for_path]
+  before_action :define_environment, only: [:show]
+  before_action :define_diff_notes_disabled, only: [:show, :diff_for_path]
+  before_action :define_commits, only: [:show, :diff_for_path, :signatures]
   before_action :merge_request, only: [:index, :show]
 
   def index
   end
 
   def show
-    compare = CompareService.new.
-      execute(@project, @head_ref, @project, @base_ref, diff_options)
+    apply_diff_view_cookie!
 
-    if compare
-      @commits = Commit.decorate(compare.commits, @project)
-      @commit = @project.commit(@head_ref)
-      @base_commit = @project.merge_base_commit(@base_ref, @head_ref)
-      @diffs = compare.diffs(diff_options)
-      @diff_refs = [@base_commit, @commit]
-      @line_notes = []
-    end
+    render
+  end
+
+  def diff_for_path
+    return render_404 unless compare
+
+    render_diff_for_path(compare.diffs(diff_options))
   end
 
   def create
-    redirect_to namespace_project_compare_path(@project.namespace, @project,
+    if params[:from].blank? || params[:to].blank?
+      flash[:alert] = "You must select a Source and a Target revision"
+      from_to_vars = {
+        from: params[:from].presence,
+        to: params[:to].presence
+      }
+      redirect_to project_compare_index_path(@project, from_to_vars)
+    else
+      redirect_to project_compare_path(@project,
                                                params[:from], params[:to])
+    end
+  end
+
+  def signatures
+    respond_to do |format|
+      format.json do
+        render json: {
+          signatures: @commits.select(&:has_signature?).map do |commit|
+            {
+              commit_sha: commit.sha,
+              html: view_to_html_string('projects/commit/_signature', signature: commit.signature)
+            }
+          end
+        }
+      end
+    end
   end
 
   private
 
-  def assign_ref_vars
-    @base_ref = Addressable::URI.unescape(params[:from])
+  def compare
+    return @compare if defined?(@compare)
+
+    @compare = CompareService.new(@project, head_ref).execute(@project, start_ref)
+  end
+
+  def start_ref
+    @start_ref ||= Addressable::URI.unescape(params[:from])
+  end
+
+  def head_ref
+    return @ref if defined?(@ref)
+
     @ref = @head_ref = Addressable::URI.unescape(params[:to])
   end
 
+  def define_commits
+    @commits = compare.present? ? prepare_commits_for_rendering(compare.commits) : []
+  end
+
+  def define_diffs
+    @diffs = compare.present? ? compare.diffs(diff_options) : []
+  end
+
+  def define_environment
+    if compare
+      environment_params = @repository.branch_exists?(head_ref) ? { ref: head_ref } : { commit: compare.commit }
+      @environment = EnvironmentsFinder.new(@project, current_user, environment_params).execute.last
+    end
+  end
+
+  def define_diff_notes_disabled
+    @diff_notes_disabled = compare.present?
+  end
+
   def merge_request
-    @merge_request ||= @project.merge_requests.opened.
-      find_by(source_project: @project, source_branch: @head_ref, target_branch: @base_ref)
+    @merge_request ||= MergeRequestsFinder.new(current_user, project_id: @project.id).execute.opened
+      .find_by(source_project: @project, source_branch: head_ref, target_branch: start_ref)
   end
 end

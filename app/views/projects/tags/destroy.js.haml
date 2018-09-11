@@ -1,3 +1,4 @@
-$('.js-totaltags-count').html("#{@repository.tags.size}");
-- if @repository.tags.empty?
+- if @error.present?
+  new Flash('#{escape_javascript(@error)}', 'alert');
+- elsif @repository.tags.empty?
   $('.tags').load(document.URL + ' .nothing-here-block').hide().fadeIn(1000)

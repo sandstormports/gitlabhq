@@ -1,5 +1,60 @@
 require 'spec_helper'
 
+# user                       GET    /u/:username/
+# user_groups                GET    /u/:username/groups(.:format)
+# user_projects              GET    /u/:username/projects(.:format)
+# user_contributed_projects  GET    /u/:username/contributed(.:format)
+# user_snippets              GET    /u/:username/snippets(.:format)
+# user_calendar              GET    /u/:username/calendar(.:format)
+# user_calendar_activities   GET    /u/:username/calendar_activities(.:format)
+describe UsersController, "routing" do
+  it "to #show" do
+    allow_any_instance_of(::Constraints::UserUrlConstrainer).to receive(:matches?).and_return(true)
+
+    expect(get("/User")).to route_to('users#show', username: 'User')
+  end
+
+  it "to #groups" do
+    expect(get("/users/User/groups")).to route_to('users#groups', username: 'User')
+  end
+
+  it "to #projects" do
+    expect(get("/users/User/projects")).to route_to('users#projects', username: 'User')
+  end
+
+  it "to #contributed" do
+    expect(get("/users/User/contributed")).to route_to('users#contributed', username: 'User')
+  end
+
+  it "to #snippets" do
+    expect(get("/users/User/snippets")).to route_to('users#snippets', username: 'User')
+  end
+
+  it "to #calendar" do
+    expect(get("/users/User/calendar")).to route_to('users#calendar', username: 'User')
+  end
+
+  it "to #calendar_activities" do
+    expect(get("/users/User/calendar_activities")).to route_to('users#calendar_activities', username: 'User')
+  end
+
+  describe 'redirect alias routes' do
+    include RSpec::Rails::RequestExampleGroup
+
+    it '/u/user1 redirects to /user1' do
+      expect(get("/u/user1")).to redirect_to('/user1')
+    end
+
+    it '/u/user1/groups redirects to /user1/groups' do
+      expect(get("/u/user1/groups")).to redirect_to('/users/user1/groups')
+    end
+
+    it '/u/user1/projects redirects to /user1/projects' do
+      expect(get("/u/user1/projects")).to redirect_to('/users/user1/projects')
+    end
+  end
+end
+
 # search GET    /search(.:format) search#show
 describe SearchController, "routing" do
   it "to #show" do
@@ -27,10 +82,6 @@ end
 #          PUT    /snippets/:id(.:format)      snippets#update
 #          DELETE /snippets/:id(.:format)      snippets#destroy
 describe SnippetsController, "routing" do
-  it "to #user_index" do
-    expect(get("/s/User")).to route_to('snippets#index', username: 'User')
-  end
-
   it "to #raw" do
     expect(get("/snippets/1/raw")).to route_to('snippets#raw', id: '1')
   end
@@ -65,7 +116,7 @@ describe SnippetsController, "routing" do
 end
 
 #            help GET /help(.:format)                 help#index
-#       help_page GET /help/:category/:file(.:format) help#show {:category=>/.*/, :file=>/[^\/\.]+/}
+#       help_page GET /help/*path(.:format)           help#show
 #  help_shortcuts GET /help/shortcuts(.:format)       help#shortcuts
 #         help_ui GET /help/ui(.:format)              help#ui
 describe HelpController, "routing" do
@@ -74,25 +125,25 @@ describe HelpController, "routing" do
   end
 
   it 'to #show' do
-    path = '/help/markdown/markdown.md'
+    path = '/help/user/markdown.md'
     expect(get(path)).to route_to('help#show',
-                                  category: 'markdown',
-                                  file: 'markdown',
+                                  path: 'user/markdown',
                                   format: 'md')
 
     path = '/help/workflow/protected_branches/protected_branches1.png'
     expect(get(path)).to route_to('help#show',
-                                  category: 'workflow/protected_branches',
-                                  file: 'protected_branches1',
+                                  path: 'workflow/protected_branches/protected_branches1',
                                   format: 'png')
-  end
 
-  it 'to #shortcuts' do
-    expect(get('/help/shortcuts')).to route_to('help#shortcuts')
+    path = '/help/ui'
+    expect(get(path)).to route_to('help#ui')
   end
+end
 
-  it 'to #ui' do
-    expect(get('/help/ui')).to route_to('help#ui')
+#                      koding GET    /koding(.:format)                      koding#index
+describe KodingController, "routing" do
+  it "to #index" do
+    expect(get("/koding")).to route_to('koding#index')
   end
 end
 
@@ -100,7 +151,6 @@ end
 #             profile_history GET    /profile/history(.:format)             profile#history
 #            profile_password PUT    /profile/password(.:format)            profile#password_update
 #               profile_token GET    /profile/token(.:format)               profile#token
-# profile_reset_private_token PUT    /profile/reset_private_token(.:format) profile#reset_private_token
 #                     profile GET    /profile(.:format)                     profile#show
 #              profile_update PUT    /profile/update(.:format)              profile#update
 describe ProfilesController, "routing" do
@@ -112,8 +162,8 @@ describe ProfilesController, "routing" do
     expect(get("/profile/audit_log")).to route_to('profiles#audit_log')
   end
 
-  it "to #reset_private_token" do
-    expect(put("/profile/reset_private_token")).to route_to('profiles#reset_private_token')
+  it "to #reset_feed_token" do
+    expect(put("/profile/reset_feed_token")).to route_to('profiles#reset_feed_token')
   end
 
   it "to #show" do
@@ -150,16 +200,8 @@ describe Profiles::KeysController, "routing" do
     expect(post("/profile/keys")).to route_to('profiles/keys#create')
   end
 
-  it "to #edit" do
-    expect(get("/profile/keys/1/edit")).to route_to('profiles/keys#edit', id: '1')
-  end
-
   it "to #show" do
     expect(get("/profile/keys/1")).to route_to('profiles/keys#show', id: '1')
-  end
-
-  it "to #update" do
-    expect(put("/profile/keys/1")).to route_to('profiles/keys#update', id: '1')
   end
 
   it "to #destroy" do
@@ -168,6 +210,8 @@ describe Profiles::KeysController, "routing" do
 
   # get all the ssh-keys of a user
   it "to #get_keys" do
+    allow_any_instance_of(::Constraints::UserUrlConstrainer).to receive(:matches?).and_return(true)
+
     expect(get("/foo.keys")).to route_to('profiles/keys#get_keys', username: 'foo')
   end
 end
@@ -205,7 +249,11 @@ describe DashboardController, "routing" do
   end
 
   it "to #issues" do
-    expect(get("/dashboard/issues")).to route_to('dashboard#issues')
+    expect(get("/dashboard/issues.html")).to route_to('dashboard#issues', format: 'html')
+  end
+
+  it "to #calendar_issues" do
+    expect(get("/dashboard/issues.ics")).to route_to('dashboard#issues_calendar', format: 'ics')
   end
 
   it "to #merge_requests" do
@@ -220,26 +268,44 @@ describe RootController, 'routing' do
   end
 end
 
-
-#        new_user_session GET    /users/sign_in(.:format)               devise/sessions#new
-#            user_session POST   /users/sign_in(.:format)               devise/sessions#create
-#    destroy_user_session DELETE /users/sign_out(.:format)              devise/sessions#destroy
-# user_omniauth_authorize        /users/auth/:provider(.:format)        omniauth_callbacks#passthru
-#  user_omniauth_callback        /users/auth/:action/callback(.:format) omniauth_callbacks#(?-mix:(?!))
-#           user_password POST   /users/password(.:format)              devise/passwords#create
-#       new_user_password GET    /users/password/new(.:format)          devise/passwords#new
-#      edit_user_password GET    /users/password/edit(.:format)         devise/passwords#edit
-#                         PUT    /users/password(.:format)              devise/passwords#update
 describe "Authentication", "routing" do
-  # pending
-end
-
-describe "Groups", "routing" do
-  it "to #show" do
-    expect(get("/groups/1")).to route_to('groups#show', id: '1')
+  it "GET /users/sign_in" do
+    expect(get("/users/sign_in")).to route_to('sessions#new')
   end
 
-  it "also display group#show on the short path" do
-    expect(get('/1')).to route_to('namespaces#show', id: '1')
+  it "POST /users/sign_in" do
+    expect(post("/users/sign_in")).to route_to('sessions#create')
+  end
+
+  # sign_out with GET instead of DELETE facilitates ad-hoc single-sign-out processes
+  # (https://gitlab.com/gitlab-org/gitlab-ce/issues/39708)
+  it "GET /users/sign_out" do
+    expect(get("/users/sign_out")).to route_to('sessions#destroy')
+  end
+
+  it "POST /users/password" do
+    expect(post("/users/password")).to route_to('passwords#create')
+  end
+
+  it "GET /users/password/new" do
+    expect(get("/users/password/new")).to route_to('passwords#new')
+  end
+
+  it "GET /users/password/edit" do
+    expect(get("/users/password/edit")).to route_to('passwords#edit')
+  end
+
+  it "PUT /users/password" do
+    expect(put("/users/password")).to route_to('passwords#update')
+  end
+end
+
+describe HealthCheckController, 'routing' do
+  it 'to #index' do
+    expect(get('/health_check')).to route_to('health_check#index')
+  end
+
+  it 'also supports passing checks in the url' do
+    expect(get('/health_check/email')).to route_to('health_check#index', checks: 'email')
   end
 end

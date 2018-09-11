@@ -1,55 +1,25 @@
 namespace :gitlab do
   namespace :git do
-
-    desc "GitLab | Git | Repack"
-    task repack: :environment do
-      failures = perform_git_cmd(%W(git repack -a --quiet), "Repacking repo")
-      if failures.empty?
-        puts "Done".green
-      else
-        output_failures(failures)
-      end
-    end
-
-    desc "GitLab | Git | Run garbage collection on all repos"
-    task gc: :environment do
-      failures = perform_git_cmd(%W(git gc --auto --quiet), "Garbage Collecting")
-      if failures.empty?
-        puts "Done".green
-      else
-        output_failures(failures)
-      end
-    end
-    
-    desc "GitLab | Git | Prune all repos"
-    task prune: :environment do
-      failures = perform_git_cmd(%W(git prune), "Git Prune")
-      if failures.empty?
-        puts "Done".green
-      else
-        output_failures(failures)
-      end
-    end
-
-    def perform_git_cmd(cmd, message)
-      puts "Starting #{message} on all repositories"
-
+    desc 'GitLab | Git | Check all repos integrity'
+    task fsck: :gitlab_environment do
       failures = []
-      all_repos do |repo|
-        if system(*cmd, chdir: repo)
-          puts "Performed #{message} at #{repo}"
-        else
-          failures << repo
+      Project.find_each(batch_size: 100) do |project|
+        begin
+          project.repository.fsck
+
+        rescue => e
+          failures << "#{project.full_path} on #{project.repository_storage}: #{e}"
         end
+
+        puts "Performed integrity check for #{project.repository.full_path}"
       end
 
-      failures
+      if failures.empty?
+        puts "Done".color(:green)
+      else
+        puts "The following repositories reported errors:".color(:red)
+        failures.each { |f| puts "- #{f}" }
+      end
     end
-
-    def output_failures(failures)
-      puts "The following repositories reported errors:".red
-      failures.each { |f| puts "- #{f}" }
-    end
-
   end
 end

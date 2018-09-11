@@ -2,22 +2,21 @@ module Gitlab
   module Email
     module Message
       class RepositoryPush
-        attr_accessor :recipient
         attr_reader :author_id, :ref, :action
 
-        include Gitlab::Routing.url_helpers
+        include Gitlab::Routing
+        include DiffHelper
 
         delegate :namespace, :name_with_namespace, to: :project, prefix: :project
         delegate :name, to: :author, prefix: :author
         delegate :username, to: :author, prefix: :author
 
-        def initialize(notify, project_id, recipient, opts = {})
+        def initialize(notify, project_id, opts = {})
           raise ArgumentError, 'Missing options: author_id, ref, action' unless
             opts[:author_id] && opts[:ref] && opts[:action]
 
           @notify = notify
           @project_id = project_id
-          @recipient = recipient
           @opts = opts.dup
 
           @author_id = @opts.delete(:author_id)
@@ -34,23 +33,32 @@ module Gitlab
         end
 
         def commits
-          @commits ||= (Commit.decorate(compare.commits, project) if compare)
+          return unless compare
+
+          @commits ||= compare.commits
         end
 
         def diffs
-          @diffs ||= (compare.diffs if compare)
+          return unless compare
+
+          # This diff is more moderated in number of files and lines
+          @diffs ||= compare.diffs(max_files: 30, max_lines: 5000, expanded: true).diff_files
         end
 
         def diffs_count
-          diffs.count if diffs
+          diffs&.size
         end
 
         def compare
-          @opts[:compare]
+          @opts[:compare] if @opts[:compare]
+        end
+
+        def diff_refs
+          @opts[:diff_refs]
         end
 
         def compare_timeout
-          diffs.overflow? if diffs
+          diffs&.overflow?
         end
 
         def reverse_compare?
@@ -88,18 +96,13 @@ module Gitlab
         def target_url
           if @action == :push && commits
             if commits.length > 1
-              namespace_project_compare_url(project_namespace,
-                                            project,
-                                            from: Commit.new(compare.base, project),
-                                            to:   Commit.new(compare.head, project))
+              project_compare_url(project, from: compare.start_commit, to: compare.head_commit)
             else
-              namespace_project_commit_url(project_namespace,
-                                           project, commits.first)
+              project_commit_url(project, commits.first)
             end
           else
             unless @action == :delete
-              namespace_project_tree_url(project_namespace,
-                                         project, ref_name)
+              project_tree_url(project, ref_name)
             end
           end
         end
@@ -114,7 +117,7 @@ module Gitlab
 
         def subject
           subject_text = '[Git]'
-          subject_text << "[#{project.path_with_namespace}]"
+          subject_text << "[#{project.full_path}]"
           subject_text << "[#{ref_name}]" if @action == :push
           subject_text << ' '
 

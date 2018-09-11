@@ -1,25 +1,19 @@
-# == Schema Information
-#
-# Table name: web_hooks
-#
-#  id                      :integer          not null, primary key
-#  url                     :string(2000)
-#  project_id              :integer
-#  created_at              :datetime
-#  updated_at              :datetime
-#  type                    :string           default("ProjectHook")
-#  service_id              :integer
-#  push_events             :boolean          default(TRUE), not null
-#  issues_events           :boolean          default(FALSE), not null
-#  merge_requests_events   :boolean          default(FALSE), not null
-#  tag_push_events         :boolean          default(FALSE)
-#  note_events             :boolean          default(FALSE), not null
-#  enable_ssl_verification :boolean          default(TRUE)
-#  build_events            :boolean          default(FALSE), not null
-#
-
 class SystemHook < WebHook
-  def async_execute(data, hook_name)
-    Sidekiq::Client.enqueue(SystemHookWorker, id, data, hook_name)
+  include TriggerableHooks
+
+  triggerable_hooks [
+    :repository_update_hooks,
+    :push_hooks,
+    :tag_push_hooks,
+    :merge_request_hooks
+  ]
+
+  default_value_for :push_events, false
+  default_value_for :repository_update_events, true
+  default_value_for :merge_requests_events, false
+
+  # Allow urls pointing localhost and the local network
+  def allow_local_requests?
+    true
   end
 end

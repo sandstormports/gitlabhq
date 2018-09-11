@@ -1,9 +1,11 @@
+# frozen_string_literal: true
+
 class Tree
   include Gitlab::MarkupHelper
 
   attr_accessor :repository, :sha, :path, :entries
 
-  def initialize(repository, sha, path = '/')
+  def initialize(repository, sha, path = '/', recursive: false)
     path = '/' if path.blank?
 
     @repository = repository
@@ -11,13 +13,15 @@ class Tree
     @path = path
 
     git_repo = @repository.raw_repository
-    @entries = Gitlab::Git::Tree.where(git_repo, @sha, @path)
+    @entries = Gitlab::Git::Tree.where(git_repo, @sha, @path, recursive)
   end
 
   def readme
     return @readme if defined?(@readme)
 
-    available_readmes = blobs.select(&:readme?)
+    available_readmes = blobs.select do |blob|
+      Gitlab::FileDetector.type_of(blob.name) == :readme
+    end
 
     previewable_readmes = available_readmes.select do |blob|
       previewable?(blob.name)
@@ -37,10 +41,7 @@ class Tree
 
     readme_path = path == '/' ? readme_tree.name : File.join(path, readme_tree.name)
 
-    git_repo = repository.raw_repository
-    @readme = Gitlab::Git::Blob.find(git_repo, sha, readme_path)
-    @readme.load_all_data!(git_repo)
-    @readme
+    @readme = repository.blob_at(sha, readme_path)
   end
 
   def trees

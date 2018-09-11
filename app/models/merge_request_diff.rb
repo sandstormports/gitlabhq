@@ -1,29 +1,33 @@
-# == Schema Information
-#
-# Table name: merge_request_diffs
-#
-#  id               :integer          not null, primary key
-#  state            :string(255)
-#  st_commits       :text
-#  st_diffs         :text
-#  merge_request_id :integer          not null
-#  created_at       :datetime
-#  updated_at       :datetime
-#
+# frozen_string_literal: true
 
 class MergeRequestDiff < ActiveRecord::Base
   include Sortable
+  include Importable
+  include ManualInverseAssociation
+  include IgnorableColumn
+  include EachBatch
 
-  # Prevent store of diff if commits amount more then 500
+  # Don't display more than 100 commits at once
   COMMITS_SAFE_SIZE = 100
 
-  belongs_to :merge_request
+  ignore_column :st_commits,
+                :st_diffs
 
-  delegate :target_branch, :source_branch, to: :merge_request, prefix: nil
+  belongs_to :merge_request
+  manual_inverse_association :merge_request, :merge_request_diff
+
+  has_many :merge_request_diff_files, -> { order(:merge_request_diff_id, :relative_order) }
+  has_many :merge_request_diff_commits, -> { order(:merge_request_diff_id, :relative_order) }
 
   state_machine :state, initial: :empty do
+    event :clean do
+      transition any => :without_files
+    end
+
     state :collected
     state :overflow
+    # Diff files have been deleted by the system
+    state :without_files
     # Deprecated states: these are no longer used but these values may still occur
     # in the database.
     state :timeout
@@ -32,41 +36,82 @@ class MergeRequestDiff < ActiveRecord::Base
     state :overflow_diff_lines_limit
   end
 
-  serialize :st_commits
-  serialize :st_diffs
+  scope :with_files, -> { without_states(:without_files, :empty) }
+  scope :viewable, -> { without_state(:empty) }
+  scope :by_commit_sha, ->(sha) do
+    joins(:merge_request_diff_commits).where(merge_request_diff_commits: { sha: sha }).reorder(nil)
+  end
 
-  after_create :reload_content
+  scope :recent, -> { order(id: :desc).limit(100) }
 
-  def reload_content
-    reload_commits
-    reload_diffs
+  # All diff information is collected from repository after object is created.
+  # It allows you to override variables like head_commit_sha before getting diff.
+  after_create :save_git_content, unless: :importing?
+
+  def self.find_by_diff_refs(diff_refs)
+    find_by(start_commit_sha: diff_refs.start_sha, head_commit_sha: diff_refs.head_sha, base_commit_sha: diff_refs.base_sha)
+  end
+
+  def viewable?
+    collected? || without_files? || overflow?
+  end
+
+  # Collect information about commits and diff from repository
+  # and save it to the database as serialized data
+  def save_git_content
+    MergeRequest
+      .where('id = ? AND COALESCE(latest_merge_request_diff_id, 0) < ?', self.merge_request_id, self.id)
+      .update_all(latest_merge_request_diff_id: self.id)
+
+    ensure_commit_shas
+    save_commits
+    save_diffs
+    save
+    keep_around_commits
+  end
+
+  def ensure_commit_shas
+    self.start_commit_sha ||= merge_request.target_branch_sha
+    self.head_commit_sha  ||= merge_request.source_branch_sha
+    self.base_commit_sha  ||= find_base_sha
+  end
+
+  # Override head_commit_sha to keep compatibility with merge request diff
+  # created before version 8.4 that does not store head_commit_sha in separate db field.
+  def head_commit_sha
+    if persisted? && super.nil?
+      last_commit_sha
+    else
+      super
+    end
+  end
+
+  # This method will rely on repository branch sha
+  # in case start_commit_sha is nil. Its necesarry for old merge request diff
+  # created before version 8.4 to work
+  def safe_start_commit_sha
+    start_commit_sha || merge_request.target_branch_sha
   end
 
   def size
-    real_size.presence || diffs.size
+    real_size.presence || raw_diffs.size
   end
 
-  def diffs(options={})
+  def raw_diffs(options = {})
     if options[:ignore_whitespace_change]
-      @diffs_no_whitespace ||= begin
-        compare = Gitlab::Git::Compare.new(
-          self.repository.raw_repository,
-          self.target_branch,
-          self.source_sha,
-        )
-        compare.diffs(options)
-      end
+      @diffs_no_whitespace ||= compare.diffs(options)
     else
-      @diffs ||= load_diffs(st_diffs, options)
+      @raw_diffs ||= {}
+      @raw_diffs[options] ||= load_diffs(options)
     end
   end
 
   def commits
-    @commits ||= load_commits(st_commits || [])
+    @commits ||= load_commits
   end
 
-  def last_commit
-    commits.first
+  def last_commit_sha
+    commit_shas.first
   end
 
   def first_commit
@@ -74,120 +119,204 @@ class MergeRequestDiff < ActiveRecord::Base
   end
 
   def base_commit
-    return nil unless self.base_commit_sha
+    return unless base_commit_sha
 
-    merge_request.target_project.commit(self.base_commit_sha)
+    project.commit_by(oid: base_commit_sha)
   end
 
-  def last_commit_short_sha
-    @last_commit_short_sha ||= last_commit.short_id
+  def start_commit
+    return unless start_commit_sha
+
+    project.commit_by(oid: start_commit_sha)
   end
 
-  def dump_commits(commits)
-    commits.map(&:to_hash)
+  def head_commit
+    return unless head_commit_sha
+
+    project.commit_by(oid: head_commit_sha)
   end
 
-  def load_commits(array)
-    array.map { |hash| Commit.new(Gitlab::Git::Commit.new(hash), merge_request.source_project) }
+  def commit_shas
+    merge_request_diff_commits.map(&:sha)
   end
 
-  def dump_diffs(diffs)
-    if diffs.respond_to?(:map)
-      diffs.map(&:to_hash)
-    end
+  def diff_refs=(new_diff_refs)
+    self.base_commit_sha = new_diff_refs&.base_sha
+    self.start_commit_sha = new_diff_refs&.start_sha
+    self.head_commit_sha = new_diff_refs&.head_sha
   end
 
-  def load_diffs(raw, options)
-    if raw.respond_to?(:each)
-      Gitlab::Git::DiffCollection.new(raw, options)
+  def diff_refs
+    return unless start_commit_sha || base_commit_sha
+
+    Gitlab::Diff::DiffRefs.new(
+      base_sha:  base_commit_sha,
+      start_sha: start_commit_sha,
+      head_sha:  head_commit_sha
+    )
+  end
+
+  # MRs created before 8.4 don't store their true diff refs (start and base),
+  # but we need to get a commit SHA for the "View file @ ..." link by a file,
+  # so we use an approximation of the diff refs if we can't get the actual one.
+  #
+  # These will not be the actual diff refs if the target branch was merged into
+  # the source branch after the merge request was created, but it is good enough
+  # for the specific purpose of linking to a commit.
+  #
+  # It is not good enough for highlighting diffs, so we can't simply pass
+  # these as `diff_refs.`
+  def fallback_diff_refs
+    real_refs = diff_refs
+    return real_refs if real_refs
+
+    likely_base_commit_sha = (first_commit&.parent || first_commit)&.sha
+
+    Gitlab::Diff::DiffRefs.new(
+      base_sha:  likely_base_commit_sha,
+      start_sha: safe_start_commit_sha,
+      head_sha:  head_commit_sha
+    )
+  end
+
+  def diff_refs_by_sha?
+    base_commit_sha? && head_commit_sha? && start_commit_sha?
+  end
+
+  def diffs(diff_options = nil)
+    if without_files? && comparison = diff_refs&.compare_in(project)
+      # It should fetch the repository when diffs are cleaned by the system.
+      # We don't keep these for storage overload purposes.
+      # See https://gitlab.com/gitlab-org/gitlab-ce/issues/37639
+      comparison.diffs(diff_options)
     else
-      Gitlab::Git::DiffCollection.new([])
+      diffs_collection(diff_options)
     end
   end
 
-  # Collect array of Git::Commit objects
-  # between target and source branches
-  def unmerged_commits
-    commits = compare.commits
-
-    if commits.present?
-      commits = Commit.decorate(commits, merge_request.source_project).
-        sort_by(&:created_at).
-        reverse
-    end
-
-    commits
+  # Should always return the DB persisted diffs collection
+  # (e.g. Gitlab::Diff::FileCollection::MergeRequestDiff.
+  # It's useful when trying to invalidate old caches through
+  # FileCollection::MergeRequestDiff#clear_cache!
+  def diffs_collection(diff_options = nil)
+    Gitlab::Diff::FileCollection::MergeRequestDiff.new(self, diff_options: diff_options)
   end
 
-  # Reload all commits related to current merge request from repo
-  # and save it as array of hashes in st_commits db field
-  def reload_commits
-    commit_objects = unmerged_commits
-
-    if commit_objects.present?
-      self.st_commits = dump_commits(commit_objects)
-    end
-
-    save
-  end
-
-  # Reload diffs between branches related to current merge request from repo
-  # and save it as array of hashes in st_diffs db field
-  def reload_diffs
-    new_diffs = []
-
-    if commits.size.zero?
-      self.state = :empty
-    else
-      diff_collection = unmerged_diffs
-
-      if diff_collection.overflow?
-        # Set our state to 'overflow' to make the #empty? and #collected?
-        # methods (generated by StateMachine) return false.
-        self.state = :overflow
-      end
-
-      self.real_size = diff_collection.real_size
-
-      if diff_collection.any?
-        new_diffs = dump_diffs(diff_collection)
-        self.state = :collected
-      end
-    end
-
-    self.st_diffs = new_diffs
-
-    self.base_commit_sha = self.repository.merge_base(self.source_sha, self.target_branch)
-
-    self.save
-  end
-
-  # Collect array of Git::Diff objects
-  # between target and source branches
-  def unmerged_diffs
-    compare.diffs(Commit.max_diff_options)
-  end
-
-  def repository
-    merge_request.target_project.repository
-  end
-
-  def source_sha
-    source_commit = merge_request.source_project.commit(source_branch)
-    source_commit.try(:sha)
+  def project
+    merge_request.target_project
   end
 
   def compare
     @compare ||=
-      begin
-        # Update ref for merge request
-        merge_request.fetch_ref
+      Gitlab::Git::Compare.new(
+        repository.raw_repository,
+        safe_start_commit_sha,
+        head_commit_sha
+      )
+  end
 
-        Gitlab::Git::Compare.new(
-          self.repository.raw_repository,
-          self.target_branch,
-          self.source_sha
-        )
+  def latest?
+    self.id == merge_request.latest_merge_request_diff_id
+  end
+
+  def compare_with(sha)
+    # When compare merge request versions we want diff A..B instead of A...B
+    # so we handle cases when user does squash and rebase of the commits between versions.
+    # For this reason we set straight to true by default.
+    CompareService.new(project, head_commit_sha).execute(project, sha, straight: true)
+  end
+
+  private
+
+  def create_merge_request_diff_files(diffs)
+    rows = diffs.map.with_index do |diff, index|
+      diff_hash = diff.to_hash.merge(
+        binary: false,
+        merge_request_diff_id: self.id,
+        relative_order: index
+      )
+
+      # Compatibility with old diffs created with Psych.
+      diff_hash.tap do |hash|
+        diff_text = hash[:diff]
+
+        if diff_text.encoding == Encoding::BINARY && !diff_text.ascii_only?
+          hash[:binary] = true
+          hash[:diff] = [diff_text].pack('m0')
+        end
       end
+    end
+
+    Gitlab::Database.bulk_insert('merge_request_diff_files', rows)
+  end
+
+  def load_diffs(options)
+    collection = merge_request_diff_files
+
+    if paths = options[:paths]
+      collection = collection.where('old_path IN (?) OR new_path IN (?)', paths, paths)
+    end
+
+    Gitlab::Git::DiffCollection.new(collection.map(&:to_hash), options)
+  end
+
+  def load_commits
+    commits = merge_request_diff_commits.map { |commit| Commit.from_hash(commit.to_hash, project) }
+
+    CommitCollection
+      .new(merge_request.source_project, commits, merge_request.source_branch)
+  end
+
+  def save_diffs
+    new_attributes = {}
+
+    if compare.commits.size.zero?
+      new_attributes[:state] = :empty
+    else
+      diff_collection = compare.diffs(Commit.max_diff_options)
+      new_attributes[:real_size] = diff_collection.real_size
+
+      if diff_collection.any?
+        new_attributes[:state] = :collected
+
+        create_merge_request_diff_files(diff_collection)
+      end
+
+      # Set our state to 'overflow' to make the #empty? and #collected?
+      # methods (generated by StateMachine) return false.
+      #
+      # This attribution has to come at the end of the method so 'overflow'
+      # state does not get overridden by 'collected'.
+      new_attributes[:state] = :overflow if diff_collection.overflow?
+    end
+
+    assign_attributes(new_attributes)
+  end
+
+  def save_commits
+    MergeRequestDiffCommit.create_bulk(self.id, compare.commits.reverse)
+
+    # merge_request_diff_commits.reload is preferred way to reload associated
+    # objects but it returns cached result for some reason in this case
+    commits = merge_request_diff_commits(true)
+    self.commits_count = commits.size
+  end
+
+  def repository
+    project.repository
+  end
+
+  def find_base_sha
+    return unless head_commit_sha && start_commit_sha
+
+    project.merge_base_commit(head_commit_sha, start_commit_sha).try(:sha)
+  end
+
+  def keep_around_commits
+    [repository, merge_request.source_project.repository].uniq.each do |repo|
+      repo.keep_around(start_commit_sha)
+      repo.keep_around(head_commit_sha)
+      repo.keep_around(base_commit_sha)
+    end
   end
 end

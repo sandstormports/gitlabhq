@@ -1,26 +1,6 @@
-# == Schema Information
-#
-# Table name: services
-#
-#  id                    :integer          not null, primary key
-#  type                  :string(255)
-#  title                 :string(255)
-#  project_id            :integer
-#  created_at            :datetime
-#  updated_at            :datetime
-#  active                :boolean          default(FALSE), not null
-#  properties            :text
-#  template              :boolean          default(FALSE)
-#  push_events           :boolean          default(TRUE)
-#  issues_events         :boolean          default(TRUE)
-#  merge_requests_events :boolean          default(TRUE)
-#  tag_push_events       :boolean          default(TRUE)
-#  note_events           :boolean          default(TRUE), not null
-#
-
 require 'spec_helper'
 
-describe GemnasiumService, models: true do
+describe GemnasiumService do
   describe "Associations" do
     it { is_expected.to belong_to :project }
     it { is_expected.to have_one :service_hook }
@@ -28,38 +8,67 @@ describe GemnasiumService, models: true do
 
   describe 'Validations' do
     context 'when service is active' do
-      before { subject.active = true }
+      before do
+        subject.active = true
+      end
 
       it { is_expected.to validate_presence_of(:token) }
       it { is_expected.to validate_presence_of(:api_key) }
     end
 
     context 'when service is inactive' do
-      before { subject.active = false }
+      before do
+        subject.active = false
+      end
 
       it { is_expected.not_to validate_presence_of(:token) }
       it { is_expected.not_to validate_presence_of(:api_key) }
     end
   end
 
-  describe "Execute" do
-    let(:user)    { create(:user) }
-    let(:project) { create(:project) }
+  describe "deprecated?" do
+    let(:project) { create(:project, :repository) }
+    let(:gemnasium_service) { described_class.new }
 
     before do
-      @gemnasium_service = GemnasiumService.new
-      allow(@gemnasium_service).to receive_messages(
+      allow(gemnasium_service).to receive_messages(
         project_id: project.id,
         project: project,
         service_hook: true,
         token: 'verySecret',
         api_key: 'GemnasiumUserApiKey'
       )
-      @sample_data = Gitlab::PushDataBuilder.build_sample(project, user)
     end
-    it "should call Gemnasium service" do
+
+    it "is true" do
+      expect(gemnasium_service.deprecated?).to be true
+    end
+
+    it "can't create a new service" do
+      expect(gemnasium_service.save).to be false
+      expect(gemnasium_service.errors[:base].first)
+        .to eq('Gemnasium has been acquired by GitLab in January 2018. Since May 15, 2018, the service provided by Gemnasium is no longer available.')
+    end
+  end
+
+  describe "Execute" do
+    let(:user)    { create(:user) }
+    let(:project) { create(:project, :repository) }
+    let(:gemnasium_service) { described_class.new }
+    let(:sample_data) { Gitlab::DataBuilder::Push.build_sample(project, user) }
+
+    before do
+      allow(gemnasium_service).to receive_messages(
+        project_id: project.id,
+        project: project,
+        service_hook: true,
+        token: 'verySecret',
+        api_key: 'GemnasiumUserApiKey'
+      )
+    end
+    it "calls Gemnasium service" do
       expect(Gemnasium::GitlabService).to receive(:execute).with(an_instance_of(Hash)).once
-      @gemnasium_service.execute(@sample_data)
+      gemnasium_service.execute(sample_data)
     end
   end
 end

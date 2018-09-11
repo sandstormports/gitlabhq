@@ -1,34 +1,51 @@
-# == Schema Information
-#
-# Table name: runners
-#
-#  id           :integer          not null, primary key
-#  token        :string(255)
-#  created_at   :datetime
-#  updated_at   :datetime
-#  description  :string(255)
-#  contacted_at :datetime
-#  active       :boolean          default(TRUE), not null
-#  is_shared    :boolean          default(FALSE)
-#  name         :string(255)
-#  version      :string(255)
-#  revision     :string(255)
-#  platform     :string(255)
-#  architecture :string(255)
-#
-
-FactoryGirl.define do
+FactoryBot.define do
   factory :ci_runner, class: Ci::Runner do
-    sequence :description do |n|
-      "My runner#{n}"
-    end
+    sequence(:description) { |n| "My runner#{n}" }
 
     platform  "darwin"
-    is_shared false
     active    true
+    access_level :not_protected
 
-    trait :shared do
-      is_shared true
+    runner_type :instance_type
+
+    trait :online do
+      contacted_at Time.now
+    end
+
+    trait :instance do
+      runner_type :instance_type
+    end
+
+    trait :group do
+      runner_type :group_type
+
+      after(:build) do |runner, evaluator|
+        runner.groups << build(:group) if runner.groups.empty?
+      end
+    end
+
+    trait :project do
+      runner_type :project_type
+
+      after(:build) do |runner, evaluator|
+        runner.projects << build(:project) if runner.projects.empty?
+      end
+    end
+
+    trait :without_projects do
+      # we use that to create invalid runner:
+      # the one without projects
+      after(:create) do |runner, evaluator|
+        runner.runner_projects.delete_all
+      end
+    end
+
+    trait :inactive do
+      active false
+    end
+
+    trait :ref_protected do
+      access_level :ref_protected
     end
   end
 end

@@ -1,22 +1,8 @@
-# == Schema Information
-#
-# Table name: broadcast_messages
-#
-#  id         :integer          not null, primary key
-#  message    :text             not null
-#  starts_at  :datetime
-#  ends_at    :datetime
-#  created_at :datetime
-#  updated_at :datetime
-#  color      :string(255)
-#  font       :string(255)
-#
-
-FactoryGirl.define do
+FactoryBot.define do
   factory :broadcast_message do
     message "MyText"
-    starts_at Date.yesterday
-    ends_at Date.tomorrow
+    starts_at 1.day.ago
+    ends_at 1.day.from_now
 
     trait :expired do
       starts_at 5.days.ago

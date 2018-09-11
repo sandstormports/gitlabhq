@@ -1,14 +1,12 @@
 module Gitlab
   # Extract possible GFM references from an arbitrary String for further processing.
   class ReferenceExtractor < Banzai::ReferenceExtractor
-    REFERABLES = %i(user issue label milestone merge_request snippet commit commit_range)
+    REFERABLES = %i(user issue label milestone merge_request snippet commit commit_range directly_addressed_user epic).freeze
     attr_accessor :project, :current_user, :author
 
-    def initialize(project, current_user = nil, author = nil)
+    def initialize(project, current_user = nil)
       @project = project
       @current_user = current_user
-      @author = author
-
       @references = {}
 
       super()
@@ -18,22 +16,36 @@ module Gitlab
       super(text, context.merge(project: project))
     end
 
+    def references(type)
+      super(type, project, current_user)
+    end
+
+    def reset_memoized_values
+      @references = {}
+      super()
+    end
+
     REFERABLES.each do |type|
       define_method("#{type}s") do
-        @references[type] ||= references(type, reference_context)
+        @references[type] ||= references(type)
       end
     end
 
     def issues
       if project && project.jira_tracker?
-        @references[:external_issue] ||= references(:external_issue, reference_context)
+        if project.issues_enabled?
+          @references[:all_issues] ||= references(:external_issue) + references(:issue)
+        else
+          @references[:external_issue] ||= references(:external_issue) +
+            references(:issue).select { |i| i.project_id != project.id }
+        end
       else
-        @references[:issue] ||= references(:issue, reference_context)
+        @references[:issue] ||= references(:issue)
       end
     end
 
     def all
-      REFERABLES.each { |referable| send(referable.to_s.pluralize) }
+      REFERABLES.each { |referable| send(referable.to_s.pluralize) } # rubocop:disable GitlabSecurity/PublicSend
       @references.values.flatten
     end
 
@@ -45,12 +57,6 @@ module Gitlab
       end
 
       @pattern = Regexp.union(patterns.compact)
-    end
-
-    private
-
-    def reference_context
-      { project: project, current_user: current_user, author: author }
     end
   end
 end

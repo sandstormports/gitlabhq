@@ -1,32 +1,41 @@
-# == Schema Information
-#
-# Table name: lfs_objects
-#
-#  id         :integer          not null, primary key
-#  oid        :string(255)      not null
-#  size       :integer          not null
-#  created_at :datetime
-#  updated_at :datetime
-#  file       :string(255)
-#
+# frozen_string_literal: true
 
 class LfsObject < ActiveRecord::Base
-  has_many :lfs_objects_projects, dependent: :destroy
+  include AfterCommitQueue
+  include ObjectStorage::BackgroundMove
+
+  has_many :lfs_objects_projects, dependent: :destroy # rubocop:disable Cop/ActiveRecordDependent
   has_many :projects, through: :lfs_objects_projects
+
+  scope :with_files_stored_locally, -> { where(file_store: [nil, LfsObjectUploader::Store::LOCAL]) }
 
   validates :oid, presence: true, uniqueness: true
 
   mount_uploader :file, LfsObjectUploader
 
-  def storage_project(project)
-    if project && project.forked?
-      storage_project(project.forked_from_project)
-    else
-      project
-    end
+  after_save :update_file_store, if: :file_changed?
+
+  def update_file_store
+    # The file.object_store is set during `uploader.store!`
+    # which happens after object is inserted/updated
+    self.update_column(:file_store, file.object_store)
   end
 
   def project_allowed_access?(project)
-    projects.exists?(storage_project(project).id)
+    projects.exists?(project.lfs_storage_project.id)
+  end
+
+  def local_store?
+    [nil, LfsObjectUploader::Store::LOCAL].include?(self.file_store)
+  end
+
+  def self.destroy_unreferenced
+    joins("LEFT JOIN lfs_objects_projects ON lfs_objects_projects.lfs_object_id = #{table_name}.id")
+        .where(lfs_objects_projects: { id: nil })
+        .destroy_all
+  end
+
+  def self.calculate_oid(path)
+    Digest::SHA256.file(path).hexdigest
   end
 end

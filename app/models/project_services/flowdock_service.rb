@@ -1,25 +1,50 @@
-# == Schema Information
-#
-# Table name: services
-#
-#  id                    :integer          not null, primary key
-#  type                  :string(255)
-#  title                 :string(255)
-#  project_id            :integer
-#  created_at            :datetime
-#  updated_at            :datetime
-#  active                :boolean          default(FALSE), not null
-#  properties            :text
-#  template              :boolean          default(FALSE)
-#  push_events           :boolean          default(TRUE)
-#  issues_events         :boolean          default(TRUE)
-#  merge_requests_events :boolean          default(TRUE)
-#  tag_push_events       :boolean          default(TRUE)
-#  note_events           :boolean          default(TRUE), not null
-#  build_events          :boolean          default(FALSE), not null
-#
-
 require "flowdock-git-hook"
+
+# Flow dock depends on Grit to compute the number of commits between two given
+# commits. To make this depend on Gitaly, a monkey patch is applied
+module Flowdock
+  class Git
+    # pass down a Repository all the way down
+    def repo
+      @options[:repo]
+    end
+
+    def config
+      {}
+    end
+
+    def messages
+      Git::Builder.new(repo: repo,
+                       ref: @ref,
+                       before: @from,
+                       after: @to,
+                       commit_url: @commit_url,
+                       branch_url: @branch_url,
+                       diff_url: @diff_url,
+                       repo_url: @repo_url,
+                       repo_name: @repo_name,
+                       permanent_refs: @permanent_refs,
+                       tags: tags
+                      ).to_hashes
+    end
+
+    class Builder
+      def commits
+        @repo.commits_between(@before, @after).map do |commit|
+          {
+            url: @opts[:commit_url] ? @opts[:commit_url] % [commit.sha] : nil,
+            id: commit.sha,
+            message: commit.message,
+            author: {
+              name: commit.author_name,
+              email: commit.author_email
+            }
+          }
+        end
+      end
+    end
+  end
+end
 
 class FlowdockService < Service
   prop_accessor :token
@@ -33,17 +58,17 @@ class FlowdockService < Service
     'Flowdock is a collaboration web app for technical teams.'
   end
 
-  def to_param
+  def self.to_param
     'flowdock'
   end
 
   def fields
     [
-      { type: 'text', name: 'token', placeholder: 'Flowdock Git source token' }
+      { type: 'text', name: 'token', placeholder: 'Flowdock Git source token', required: true }
     ]
   end
 
-  def supported_events
+  def self.supported_events
     %w(push)
   end
 
@@ -55,10 +80,10 @@ class FlowdockService < Service
       data[:before],
       data[:after],
       token: token,
-      repo: project.repository.path_to_repo,
-      repo_url: "#{Gitlab.config.gitlab.url}/#{project.path_with_namespace}",
-      commit_url: "#{Gitlab.config.gitlab.url}/#{project.path_with_namespace}/commit/%s",
-      diff_url: "#{Gitlab.config.gitlab.url}/#{project.path_with_namespace}/compare/%s...%s",
+      repo: project.repository,
+      repo_url: "#{Gitlab.config.gitlab.url}/#{project.full_path}",
+      commit_url: "#{Gitlab.config.gitlab.url}/#{project.full_path}/commit/%s",
+      diff_url: "#{Gitlab.config.gitlab.url}/#{project.full_path}/compare/%s...%s"
     )
   end
 end

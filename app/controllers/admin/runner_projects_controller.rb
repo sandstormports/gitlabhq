@@ -1,11 +1,6 @@
 class Admin::RunnerProjectsController < Admin::ApplicationController
   before_action :project, only: [:create]
 
-  def index
-    @runner_projects = project.runner_projects.all
-    @runner_project = project.runner_projects.new
-  end
-
   def create
     @runner = Ci::Runner.find(params[:runner_project][:runner_id])
 
@@ -21,13 +16,13 @@ class Admin::RunnerProjectsController < Admin::ApplicationController
     runner = rp.runner
     rp.destroy
 
-    redirect_to admin_runner_path(runner)
+    redirect_to admin_runner_path(runner), status: :found
   end
 
   private
 
   def project
-    @project = Project.find_with_namespace(
+    @project = Project.find_by_full_path(
       [params[:namespace_id], '/', params[:project_id]].join('')
     )
     @project || render_404

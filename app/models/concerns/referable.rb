@@ -7,7 +7,7 @@ module Referable
 
   # Returns the String necessary to reference this object in Markdown
   #
-  # from_project - Refering Project object
+  # from - Referring parent object
   #
   # This should be overridden by the including class.
   #
@@ -17,12 +17,25 @@ module Referable
   #   Issue.last.to_reference(other_project) # => "cross-project#1"
   #
   # Returns a String
-  def to_reference(_from_project = nil)
+  def to_reference(_from = nil, full:)
     ''
   end
 
-  def reference_link_text(from_project = nil)
-    to_reference(from_project)
+  def reference_link_text(from = nil)
+    to_reference(from)
+  end
+
+  included do
+    alias_method :non_referable_inspect, :inspect
+    alias_method :inspect, :referable_inspect
+  end
+
+  def referable_inspect
+    if respond_to?(:id)
+      "#<#{self.class.name} id:#{id} #{to_reference(full: true)}>"
+    else
+      "#<#{self.class.name} #{to_reference(full: true)}>"
+    end
   end
 
   module ClassMethods
@@ -49,6 +62,10 @@ module Referable
       raise NotImplementedError, "#{self} does not implement #{__method__}"
     end
 
+    def reference_valid?(reference)
+      true
+    end
+
     def link_reference_pattern(route, pattern)
       %r{
         (?<url>
@@ -66,19 +83,6 @@ module Referable
           (?<anchor>\#[a-z0-9_-]+)?
         )
       }x
-    end
-  end
-
-  private
-
-  # Check if a reference is being done cross-project
-  #
-  # from_project - Refering Project object
-  def cross_project_reference?(from_project)
-    if self.is_a?(Project)
-      self != from_project
-    else
-      from_project && self.project && self.project != from_project
     end
   end
 end

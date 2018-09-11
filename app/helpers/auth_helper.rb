@@ -1,13 +1,13 @@
 module AuthHelper
-  PROVIDERS_WITH_ICONS = %w(twitter github gitlab bitbucket google_oauth2 facebook azure_oauth2).freeze
-  FORM_BASED_PROVIDERS = [/\Aldap/, 'crowd'].freeze
+  PROVIDERS_WITH_ICONS = %w(twitter github gitlab bitbucket google_oauth2 facebook azure_oauth2 authentiq).freeze
+  LDAP_PROVIDER = /\Aldap/
 
   def ldap_enabled?
-    Gitlab.config.ldap.enabled
+    Gitlab::Auth::LDAP::Config.enabled?
   end
 
   def omniauth_enabled?
-    Gitlab.config.omniauth.enabled
+    Gitlab::Auth.omniauth_enabled?
   end
 
   def provider_has_icon?(name)
@@ -15,15 +15,15 @@ module AuthHelper
   end
 
   def auth_providers
-    Gitlab::OAuth::Provider.providers
+    Gitlab::Auth::OAuth::Provider.providers
   end
 
   def label_for_provider(name)
-    Gitlab::OAuth::Provider.label_for(name)
+    Gitlab::Auth::OAuth::Provider.label_for(name)
   end
 
   def form_based_provider?(name)
-    FORM_BASED_PROVIDERS.any? { |pattern| pattern === name.to_s }
+    [LDAP_PROVIDER, 'crowd'].any? { |pattern| pattern === name.to_s }
   end
 
   def form_based_providers
@@ -36,6 +36,20 @@ module AuthHelper
 
   def button_based_providers
     auth_providers.reject { |provider| form_based_provider?(provider) }
+  end
+
+  def providers_for_base_controller
+    auth_providers.reject { |provider| LDAP_PROVIDER === provider }
+  end
+
+  def enabled_button_based_providers
+    disabled_providers = Gitlab::CurrentSettings.disabled_oauth_sign_in_sources || []
+
+    button_based_providers.map(&:to_s) - disabled_providers
+  end
+
+  def button_based_providers_enabled?
+    enabled_button_based_providers.any?
   end
 
   def provider_image_tag(provider, size = 64)
@@ -54,16 +68,8 @@ module AuthHelper
     current_user.identities.exists?(provider: provider.to_s)
   end
 
-  def two_factor_skippable?
-    current_application_settings.require_two_factor_authentication &&
-      !current_user.two_factor_enabled &&
-      current_application_settings.two_factor_grace_period &&
-      !two_factor_grace_period_expired?
-  end
-
-  def two_factor_grace_period_expired?
-    current_user.otp_grace_period_started_at &&
-      (current_user.otp_grace_period_started_at + current_application_settings.two_factor_grace_period.hours) < Time.current
+  def unlink_allowed?(provider)
+    %w(saml cas3).exclude?(provider.to_s)
   end
 
   extend self

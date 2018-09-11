@@ -1,6 +1,6 @@
 require 'spec_helper'
 
-describe Gitlab::UrlBuilder, lib: true do
+describe Gitlab::UrlBuilder do
   describe '.build' do
     context 'when passing a Commit' do
       it 'returns a proper URL' do
@@ -8,7 +8,7 @@ describe Gitlab::UrlBuilder, lib: true do
 
         url = described_class.build(commit)
 
-        expect(url).to eq "#{Settings.gitlab['url']}/#{commit.project.path_with_namespace}/commit/#{commit.id}"
+        expect(url).to eq "#{Settings.gitlab['url']}/#{commit.project.full_path}/commit/#{commit.id}"
       end
     end
 
@@ -18,7 +18,32 @@ describe Gitlab::UrlBuilder, lib: true do
 
         url = described_class.build(issue)
 
-        expect(url).to eq "#{Settings.gitlab['url']}/#{issue.project.path_with_namespace}/issues/#{issue.iid}"
+        expect(url).to eq "#{Settings.gitlab['url']}/#{issue.project.full_path}/issues/#{issue.iid}"
+      end
+    end
+
+    context 'when passing a Milestone' do
+      let(:group) { create(:group) }
+      let(:project) { create(:project, :public, namespace: group) }
+
+      context 'belonging to a project' do
+        it 'returns a proper URL' do
+          milestone = create(:milestone, project: project)
+
+          url = described_class.build(milestone)
+
+          expect(url).to eq "#{Settings.gitlab['url']}/#{milestone.project.full_path}/milestones/#{milestone.iid}"
+        end
+      end
+
+      context 'belonging to a group' do
+        it 'returns a proper URL' do
+          milestone = create(:milestone, group: group)
+
+          url = described_class.build(milestone)
+
+          expect(url).to eq "#{Settings.gitlab['url']}/groups/#{milestone.group.full_path}/-/milestones/#{milestone.iid}"
+        end
       end
     end
 
@@ -28,7 +53,7 @@ describe Gitlab::UrlBuilder, lib: true do
 
         url = described_class.build(merge_request)
 
-        expect(url).to eq "#{Settings.gitlab['url']}/#{merge_request.project.path_with_namespace}/merge_requests/#{merge_request.iid}"
+        expect(url).to eq "#{Settings.gitlab['url']}/#{merge_request.project.full_path}/merge_requests/#{merge_request.iid}"
       end
     end
 
@@ -39,17 +64,17 @@ describe Gitlab::UrlBuilder, lib: true do
 
           url = described_class.build(note)
 
-          expect(url).to eq "#{Settings.gitlab['url']}/#{note.project.path_with_namespace}/commit/#{note.commit_id}#note_#{note.id}"
+          expect(url).to eq "#{Settings.gitlab['url']}/#{note.project.full_path}/commit/#{note.commit_id}#note_#{note.id}"
         end
       end
 
-      context 'on a CommitDiff' do
+      context 'on a Commit Diff' do
         it 'returns a proper URL' do
-          note = build_stubbed(:note_on_commit_diff)
+          note = build_stubbed(:diff_note_on_commit)
 
           url = described_class.build(note)
 
-          expect(url).to eq "#{Settings.gitlab['url']}/#{note.project.path_with_namespace}/commit/#{note.commit_id}#note_#{note.id}"
+          expect(url).to eq "#{Settings.gitlab['url']}/#{note.project.full_path}/commit/#{note.commit_id}#note_#{note.id}"
         end
       end
 
@@ -60,7 +85,7 @@ describe Gitlab::UrlBuilder, lib: true do
 
           url = described_class.build(note)
 
-          expect(url).to eq "#{Settings.gitlab['url']}/#{issue.project.path_with_namespace}/issues/#{issue.iid}#note_#{note.id}"
+          expect(url).to eq "#{Settings.gitlab['url']}/#{issue.project.full_path}/issues/#{issue.iid}#note_#{note.id}"
         end
       end
 
@@ -71,18 +96,18 @@ describe Gitlab::UrlBuilder, lib: true do
 
           url = described_class.build(note)
 
-          expect(url).to eq "#{Settings.gitlab['url']}/#{merge_request.project.path_with_namespace}/merge_requests/#{merge_request.iid}#note_#{note.id}"
+          expect(url).to eq "#{Settings.gitlab['url']}/#{merge_request.project.full_path}/merge_requests/#{merge_request.iid}#note_#{note.id}"
         end
       end
 
-      context 'on a MergeRequestDiff' do
+      context 'on a MergeRequest Diff' do
         it 'returns a proper URL' do
           merge_request = create(:merge_request, iid: 42)
-          note = build_stubbed(:note_on_merge_request_diff, noteable: merge_request)
+          note = build_stubbed(:diff_note_on_merge_request, noteable: merge_request)
 
           url = described_class.build(note)
 
-          expect(url).to eq "#{Settings.gitlab['url']}/#{merge_request.project.path_with_namespace}/merge_requests/#{merge_request.iid}#note_#{note.id}"
+          expect(url).to eq "#{Settings.gitlab['url']}/#{merge_request.project.full_path}/merge_requests/#{merge_request.iid}#note_#{note.id}"
         end
       end
 
@@ -93,7 +118,18 @@ describe Gitlab::UrlBuilder, lib: true do
 
           url = described_class.build(note)
 
-          expect(url).to eq "#{Settings.gitlab['url']}/#{project_snippet.project.path_with_namespace}/snippets/#{note.noteable_id}#note_#{note.id}"
+          expect(url).to eq "#{Settings.gitlab['url']}/#{project_snippet.project.full_path}/snippets/#{note.noteable_id}#note_#{note.id}"
+        end
+      end
+
+      context 'on a PersonalSnippet' do
+        it 'returns a proper URL' do
+          personal_snippet = create(:personal_snippet)
+          note = build_stubbed(:note_on_personal_snippet, noteable: personal_snippet)
+
+          url = described_class.build(note)
+
+          expect(url).to eq "#{Settings.gitlab['url']}/snippets/#{note.noteable_id}#note_#{note.id}"
         end
       end
 
@@ -101,8 +137,8 @@ describe Gitlab::UrlBuilder, lib: true do
         it 'returns a proper URL' do
           project = build_stubbed(:project)
 
-          expect { described_class.build(project) }.
-            to raise_error(NotImplementedError, 'No URL builder defined for Project')
+          expect { described_class.build(project) }
+            .to raise_error(NotImplementedError, 'No URL builder defined for Project')
         end
       end
     end

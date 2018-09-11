@@ -16,7 +16,7 @@ services:
   - mysql:latest
 
 variables:
-  # Configure mysql environment variables (https://hub.docker.com/_/mysql/)
+  # Configure mysql environment variables (https://hub.docker.com/r/_/mysql/)
   MYSQL_DATABASE: el_duderino
   MYSQL_ROOT_PASSWORD: mysql_strong_password
 ```
@@ -31,7 +31,7 @@ Database: el_duderino
 ```
 
 If you are wondering why we used `mysql` for the `Host`, read more at
-[How is service linked to the build](../docker/using_docker_images.md#how-is-service-linked-to-the-build).
+[How is service linked to the job](../docker/using_docker_images.md#how-is-service-linked-to-the-job).
 
 You can also use any other docker image available on [Docker Hub][hub-mysql].
 For example, to use MySQL 5.5 the service becomes `mysql:5.5`.
@@ -112,7 +112,7 @@ convenience that runs on [GitLab.com](https://gitlab.com) using our publicly
 available [shared runners](../runners/README.md).
 
 Want to hack on it? Simply fork it, commit and push  your changes. Within a few
-moments the changes will be picked by a public runner and the build will begin.
+moments the changes will be picked by a public runner and the job will begin.
 
-[hub-mysql]: https://hub.docker.com/_/mysql/
+[hub-mysql]: https://hub.docker.com/r/_/mysql/
 [mysql-example-repo]: https://gitlab.com/gitlab-examples/mysql

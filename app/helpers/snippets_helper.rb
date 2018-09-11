@@ -1,10 +1,28 @@
 module SnippetsHelper
-  def reliable_snippet_path(snippet)
+  def reliable_snippet_path(snippet, opts = nil)
     if snippet.project_id?
-      namespace_project_snippet_path(snippet.project.namespace,
-                                     snippet.project, snippet)
+      project_snippet_path(snippet.project, snippet, opts)
     else
-      snippet_path(snippet)
+      snippet_path(snippet, opts)
+    end
+  end
+
+  def download_snippet_path(snippet)
+    if snippet.project_id
+      raw_project_snippet_path(@project, snippet, inline: false)
+    else
+      raw_snippet_path(snippet, inline: false)
+    end
+  end
+
+  # Return the path of a snippets index for a user or for a project
+  #
+  # @returns String, path to snippet index
+  def subject_snippets_path(subject = nil, opts = nil)
+    if subject.is_a?(Project)
+      project_snippets_path(subject, opts)
+    else # assume subject === User
+      dashboard_snippets_path(opts)
     end
   end
 
@@ -31,7 +49,7 @@ module SnippetsHelper
         0,
         lined_content.size,
         surrounding_lines
-      ) if line.include?(query)
+      ) if line.downcase.include?(query.downcase)
     end
 
     used_lines.uniq.sort
@@ -71,6 +89,7 @@ module SnippetsHelper
         snippet_chunk = [lined_content[line_number]]
         snippet_start_line = line_number
       end
+
       last_line = line_number
     end
     # Add final chunk to chunk array
@@ -81,5 +100,40 @@ module SnippetsHelper
 
     # Return snippet with chunk array
     { snippet_object: snippet, snippet_chunks: snippet_chunks }
+  end
+
+  def snippet_embed
+    "<script src=\"#{url_for(only_path: false, overwrite_params: nil)}.js\"></script>"
+  end
+
+  def embedded_snippet_raw_button
+    blob = @snippet.blob
+    return if blob.empty? || blob.raw_binary? || blob.stored_externally?
+
+    snippet_raw_url = if @snippet.is_a?(PersonalSnippet)
+                        raw_snippet_url(@snippet)
+                      else
+                        raw_project_snippet_url(@snippet.project, @snippet)
+                      end
+
+    link_to external_snippet_icon('doc-code'), snippet_raw_url, class: 'btn', target: '_blank', rel: 'noopener noreferrer', title: 'Open raw'
+  end
+
+  def embedded_snippet_download_button
+    download_url = if @snippet.is_a?(PersonalSnippet)
+                     raw_snippet_url(@snippet, inline: false)
+                   else
+                     raw_project_snippet_url(@snippet.project, @snippet, inline: false)
+                   end
+
+    link_to external_snippet_icon('download'), download_url, class: 'btn', target: '_blank', title: 'Download', rel: 'noopener noreferrer'
+  end
+
+  def public_snippet?
+    if @snippet.project_id?
+      can?(nil, :read_project_snippet, @snippet)
+    else
+      can?(nil, :read_personal_snippet, @snippet)
+    end
   end
 end

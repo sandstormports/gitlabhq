@@ -4,11 +4,11 @@ describe Gitlab::Email::Message::RepositoryPush do
   include RepoHelpers
 
   let!(:group) { create(:group, name: 'my_group') }
-  let!(:project) { create(:project, name: 'my_project', namespace: group) }
+  let!(:project) { create(:project, :repository, namespace: group) }
   let!(:author) { create(:author, name: 'Author') }
 
   let(:message) do
-    described_class.new(Notify, project.id, 'recipient@example.com', opts)
+    described_class.new(Notify, project.id, opts)
   end
 
   context 'new commits have been pushed to repository' do
@@ -16,9 +16,12 @@ describe Gitlab::Email::Message::RepositoryPush do
       { author_id: author.id, ref: 'master', action: :push, compare: compare,
         send_from_committer_email: true }
     end
-    let(:compare) do
+    let(:raw_compare) do
       Gitlab::Git::Compare.new(project.repository.raw_repository,
-                               sample_image_commit.id, sample_commit.id)
+        sample_image_commit.id, sample_commit.id)
+    end
+    let(:compare) do
+      Compare.decorate(raw_compare, project)
     end
 
     describe '#project' do
@@ -35,7 +38,7 @@ describe Gitlab::Email::Message::RepositoryPush do
 
     describe '#project_name_with_namespace' do
       subject { message.project_name_with_namespace }
-      it { is_expected.to eq 'my_group / my_project' }
+      it { is_expected.to eq "#{group.name} / #{project.path}" }
     end
 
     describe '#author' do
@@ -57,22 +60,22 @@ describe Gitlab::Email::Message::RepositoryPush do
 
     describe '#diffs' do
       subject { message.diffs }
-      it { is_expected.to all(be_an_instance_of Gitlab::Git::Diff) }
+      it { is_expected.to all(be_an_instance_of Gitlab::Diff::File) }
     end
 
     describe '#diffs_count' do
       subject { message.diffs_count }
-      it { is_expected.to eq compare.diffs.count }
+      it { is_expected.to eq raw_compare.diffs.size }
     end
 
     describe '#compare' do
       subject { message.compare }
-      it { is_expected.to be_an_instance_of Gitlab::Git::Compare }
+      it { is_expected.to be_an_instance_of Compare }
     end
 
     describe '#compare_timeout' do
       subject { message.compare_timeout }
-      it { is_expected.to eq compare.diffs.overflow? }
+      it { is_expected.to eq raw_compare.diffs.overflow? }
     end
 
     describe '#reverse_compare?' do
@@ -114,7 +117,7 @@ describe Gitlab::Email::Message::RepositoryPush do
 
     describe '#subject' do
       subject { message.subject }
-      it { is_expected.to include "[Git][#{project.path_with_namespace}]" }
+      it { is_expected.to include "[Git][#{project.full_path}]" }
       it { is_expected.to include "#{compare.commits.length} commits" }
       it { is_expected.to include compare.commits.first.message.split("\n").first }
     end

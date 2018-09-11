@@ -1,26 +1,19 @@
-# == Schema Information
-#
-# Table name: abuse_reports
-#
-#  id          :integer          not null, primary key
-#  reporter_id :integer
-#  user_id     :integer
-#  message     :text
-#  created_at  :datetime
-#  updated_at  :datetime
-#
-
 require 'rails_helper'
 
-RSpec.describe AbuseReport, type: :model do
-  subject     { create(:abuse_report) }
-  let(:user)  { create(:user) }
+describe AbuseReport do
+  set(:report) { create(:abuse_report) }
+  set(:user) { create(:admin) }
+  subject { report }
 
   it { expect(subject).to be_valid }
 
   describe 'associations' do
     it { is_expected.to belong_to(:reporter).class_name('User') }
     it { is_expected.to belong_to(:user) }
+
+    it "aliases reporter to author" do
+      expect(subject.author).to be(subject.reporter)
+    end
   end
 
   describe 'validations' do
@@ -36,8 +29,7 @@ RSpec.describe AbuseReport, type: :model do
     end
 
     it 'lets a worker delete the user' do
-      expect(DeleteUserWorker).to receive(:perform_async).with(user.id, subject.user.id,
-                                                              delete_solo_owned_groups: true)
+      expect(DeleteUserWorker).to receive(:perform_async).with(user.id, subject.user.id, hard_delete: true)
 
       subject.remove_user(deleted_by: user)
     end
@@ -45,8 +37,8 @@ RSpec.describe AbuseReport, type: :model do
 
   describe '#notify' do
     it 'delivers' do
-      expect(AbuseReportMailer).to receive(:notify).with(subject.id).
-        and_return(spy)
+      expect(AbuseReportMailer).to receive(:notify).with(subject.id)
+        .and_return(spy)
 
       subject.notify
     end

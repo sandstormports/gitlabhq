@@ -48,14 +48,14 @@
 
   .lead
     Gray content block with side padding using
-    %code .gray-content-block
+    %code .row-content-block
 
   .example
-    .gray-content-block
+    .row-content-block
       %h4 Normal block inside content
       = lorem
 
-    .gray-content-block.second-block
+    .row-content-block.second-block
       %h4 Second block
       = lorem
 
@@ -66,7 +66,7 @@
   .example
     .cover-block
       .avatar-holder
-        = image_tag avatar_icon('admin@example.com', 90), class: "avatar s90", alt: ''
+        = image_tag avatar_icon_for_email('admin@example.com', 90), class: "avatar s90", alt: ''
       .cover-title
         John Smith
 
@@ -74,10 +74,10 @@
         = lorem
 
       .cover-controls
-        = link_to '#', class: 'btn btn-gray' do
+        = link_to '#', class: 'btn btn-default' do
           = icon('pencil')
         &nbsp;
-        = link_to '#', class: 'btn btn-gray' do
+        = link_to '#', class: 'btn btn-default' do
           = icon('rss')
 
   %h2#lists Lists
@@ -116,9 +116,9 @@
 
   .lead
     List with hover effect
-    %code .well-list
+    %code .hover-list
   .example
-    %ul.well-list
+    %ul.hover-list
       %li
         One item
       %li
@@ -129,9 +129,9 @@
   .lead
     List inside panel
   .example
-    .panel.panel-default
-      .panel-heading Your list
-      %ul.well-list
+    .card
+      .card-header Your list
+      %ul.content-list
         %li
           One item
         %li
@@ -174,7 +174,7 @@
 
   .example
     .top-area
-      %ul.nav-links
+      %ul.nav-links.nav.nav-tabs
         %li.active
           %a Open
         %li
@@ -182,14 +182,14 @@
       .nav-controls
         = text_field_tag 'sample', nil, class: 'form-control'
         .dropdown
-          %button.dropdown-menu-toggle{type: 'button', 'data-toggle' => 'dropdown'}
+          %button.dropdown-menu-toggle{ type: 'button', 'data-toggle' => 'dropdown' }
             %span Sort by name
             = icon('chevron-down')
           %ul.dropdown-menu
             %li
-              %a Sort by date
+              = link_to 'Sort by date', '#'
 
-        = link_to 'New issue', '#', class: 'btn btn-new'
+        = link_to 'New issue', '#', class: 'btn btn-new btn-inverted'
 
   .lead
     Only nav links without button and search
@@ -205,122 +205,121 @@
   %h2#buttons Buttons
 
   .example
-    %button.btn.btn-default{:type => "button"} Default
-    %button.btn.btn-gray{:type => "button"} Gray
-    %button.btn.btn-primary{:type => "button"} Primary
-    %button.btn.btn-success{:type => "button"} Success
-    %button.btn.btn-info{:type => "button"} Info
-    %button.btn.btn-warning{:type => "button"} Warning
-    %button.btn.btn-danger{:type => "button"} Danger
-    %button.btn.btn-link{:type => "button"} Link
+    %button.btn.btn-default{ :type => "button" } Secondary
+    %button.btn.btn-primary{ :type => "button" } Primary
+    %button.btn.btn-success{ :type => "button" } Success
+    %button.btn.btn-info{ :type => "button" } Info
+    %button.btn.btn-warning{ :type => "button" } Warning
+    %button.btn.btn-danger{ :type => "button" } Danger
+    %button.btn.btn-link{ :type => "button" } Link
 
   %h2#dropdowns Dropdowns
 
   .example
     .clearfix
-      .dropdown.inline.pull-left
-        %button.dropdown-menu-toggle{type: 'button', data: {toggle: 'dropdown'}}
+      .dropdown.inline.float-left
+        %button.dropdown-menu-toggle{ type: 'button', data: { toggle: 'dropdown' } }
           Dropdown
           = icon('chevron-down')
         %ul.dropdown-menu
           %li
-            %a{href: "#"}
-              Dropdown Option
-      .dropdown.inline.pull-right
-        %button.dropdown-menu-toggle{type: 'button', data: {toggle: 'dropdown'}}
+            %a{ href: "#" }
+              Dropdown option
+      .dropdown.inline.float-right
+        %button.dropdown-menu-toggle{ type: 'button', data: { toggle: 'dropdown' } }
           Dropdown
           = icon('chevron-down')
-        %ul.dropdown-menu.dropdown-menu-align-right
+        %ul.dropdown-menu.dropdown-menu-right
           %li
-            %a{href: "#"}
-              Dropdown Option
+            %a{ href: "#" }
+              Dropdown option
   .example
     %div
       .dropdown.inline
-        %button.dropdown-menu-toggle{type: 'button', data: {toggle: 'dropdown'}}
+        %button.dropdown-menu-toggle{ type: 'button', data: { toggle: 'dropdown' } }
           Dropdown
           = icon('chevron-down')
         %ul.dropdown-menu.dropdown-menu-selectable
           %li
-            %a.is-active{href: "#"}
-              Dropdown Option
+            %a.is-active{ href: "#" }
+              Dropdown option
   .example
     %div
       .dropdown.inline
-        %button.dropdown-menu-toggle{type: 'button', data: {toggle: 'dropdown'}}
+        %button.dropdown-menu-toggle{ type: 'button', data: { toggle: 'dropdown' } }
           Dropdown
           = icon('chevron-down')
         .dropdown-menu.dropdown-select.dropdown-menu-selectable
           .dropdown-title
-            %span Dropdown Title
-            %button.dropdown-title-button.dropdown-menu-close{aria: {label: "Close"}}
+            %span Dropdown title
+            %button.dropdown-title-button.dropdown-menu-close{ aria: { label: "Close" } }
               = icon('times')
           .dropdown-input
-            %input.dropdown-input-field{type: "search", placeholder: "Filter results"}
+            %input.dropdown-input-field{ type: "search", placeholder: "Filter results" }
             = icon('search')
           .dropdown-content
             %ul
               %li
-                %a.is-active{href: "#"}
-                  Dropdown Option
+                %a.is-active{ href: "#" }
+                  Dropdown option
               %li
-                %a{href: "#"}
-                  Dropdown Option
+                %a{ href: "#" }
+                  Dropdown option
               %li.divider
               %li
-                %a{href: "#"}
-                  Dropdown Option
+                %a{ href: "#" }
+                  Dropdown option
               %li
-                %a{href: "#"}
-                  Dropdown Option
+                %a{ href: "#" }
+                  Dropdown option
               %li
-                %a{href: "#"}
-                  Dropdown Option
+                %a{ href: "#" }
+                  Dropdown option
               %li
-                %a{href: "#"}
-                  Dropdown Option
+                %a{ href: "#" }
+                  Dropdown option
               %li
-                %a{href: "#"}
-                  Dropdown Option
+                %a{ href: "#" }
+                  Dropdown option
           .dropdown-footer
             %strong Tip:
             If an author is not a member of this project, you can still filter by his name while using the search field.
       .dropdown.inline
-        %button.dropdown-menu-toggle{type: 'button', data: {toggle: 'dropdown'}}
+        %button.dropdown-menu-toggle{ type: 'button', data: { toggle: 'dropdown' } }
           Dropdown loading
           = icon('chevron-down')
         .dropdown-menu.dropdown-select.dropdown-menu-selectable.is-loading
           .dropdown-title
-            %span Dropdown Title
-            %button.dropdown-title-button.dropdown-menu-close{aria: {label: "Close"}}
+            %span Dropdown title
+            %button.dropdown-title-button.dropdown-menu-close{ aria: { label: "Close" } }
               = icon('times')
           .dropdown-input
-            %input.dropdown-input-field{type: "search", placeholder: "Filter results"}
+            %input.dropdown-input-field{ type: "search", placeholder: "Filter results" }
             = icon('search')
           .dropdown-content
             %ul
               %li
-                %a.is-active{href: "#"}
-                  Dropdown Option
+                %a.is-active{ href: "#" }
+                  Dropdown option
               %li
-                %a{href: "#"}
-                  Dropdown Option
+                %a{ href: "#" }
+                  Dropdown option
               %li.divider
               %li
-                %a{href: "#"}
-                  Dropdown Option
+                %a{ href: "#" }
+                  Dropdown option
               %li
-                %a{href: "#"}
-                  Dropdown Option
+                %a{ href: "#" }
+                  Dropdown option
               %li
-                %a{href: "#"}
-                  Dropdown Option
+                %a{ href: "#" }
+                  Dropdown option
               %li
-                %a{href: "#"}
-                  Dropdown Option
+                %a{ href: "#" }
+                  Dropdown option
               %li
-                %a{href: "#"}
-                  Dropdown Option
+                %a{ href: "#" }
+                  Dropdown option
           .dropdown-footer
             %strong Tip:
             If an author is not a member of this project, you can still filter by his name while using the search field.
@@ -330,21 +329,21 @@
   .example
     %div
       .dropdown.inline
-        %button.dropdown-menu-toggle{type: 'button', data: {toggle: 'dropdown'}}
+        %button.dropdown-menu-toggle{ type: 'button', data: {toggle: 'dropdown' } }
           Dropdown user
           = icon('chevron-down')
         .dropdown-menu.dropdown-select.dropdown-menu-selectable.dropdown-menu-user
           .dropdown-title
-            %span Dropdown Title
-            %button.dropdown-title-button.dropdown-menu-close{aria: {label: "Close"}}
+            %span Dropdown title
+            %button.dropdown-title-button.dropdown-menu-close{ aria: { label: "Close" } }
               = icon('times')
           .dropdown-input
-            %input.dropdown-input-field{type: "search", placeholder: "Filter results"}
+            %input.dropdown-input-field{ type: "search", placeholder: "Filter results" }
             = icon('search')
           .dropdown-content
             %ul
               %li
-                %a.dropdown-menu-user-link.is-active{href: "#"}
+                %a.dropdown-menu-user-link.is-active{ href: "#" }
                   = link_to_member_avatar(@user, size: 30)
                   %strong.dropdown-menu-user-full-name
                     = @user.name
@@ -354,24 +353,24 @@
   .example
     %div
       .dropdown.inline
-        %button.dropdown-menu-toggle{type: 'button', data: {toggle: 'dropdown'}}
+        %button.dropdown-menu-toggle{ type: 'button', data: { toggle: 'dropdown' } }
           Dropdown page 2
           = icon('chevron-down')
         .dropdown-menu.dropdown-select.dropdown-menu-selectable.dropdown-menu-user.dropdown-menu-paging.is-page-two
           .dropdown-page-one
             .dropdown-title
-              %button.dropdown-title-button.dropdown-menu-back{aria: {label: "Go back"}}
+              %button.dropdown-title-button.dropdown-menu-back{ aria: { label: "Go back" } }
                 = icon('arrow-left')
-              %span Dropdown Title
-              %button.dropdown-title-button.dropdown-menu-close{aria: {label: "Close"}}
+              %span Dropdown title
+              %button.dropdown-title-button.dropdown-menu-close{ aria: { label: "Close" } }
                 = icon('times')
             .dropdown-input
-              %input.dropdown-input-field{type: "search", placeholder: "Filter results"}
+              %input.dropdown-input-field{ type: "search", placeholder: "Filter results" }
               = icon('search')
             .dropdown-content
               %ul
                 %li
-                  %a.dropdown-menu-user-link.is-active{href: "#"}
+                  %a.dropdown-menu-user-link.is-active{ href: "#" }
                     = link_to_member_avatar(@user, size: 30)
                     %strong.dropdown-menu-user-full-name
                       = @user.name
@@ -379,13 +378,13 @@
                       = @user.to_reference
           .dropdown-page-two
             .dropdown-title
-              %button.dropdown-title-button.dropdown-menu-back{aria: {label: "Go back"}}
+              %button.dropdown-title-button.dropdown-menu-back{ aria: { label: "Go back" } }
                 = icon('arrow-left')
               %span Create label
-              %button.dropdown-title-button.dropdown-menu-close{aria: {label: "Close"}}
+              %button.dropdown-title-button.dropdown-menu-close{ aria: { label: "Close" } }
                 = icon('times')
             .dropdown-input
-              %input.dropdown-input-field{type: "search", placeholder: "Name new label"}
+              %input.dropdown-input-field{ type: "search", placeholder: "Name new label" }
             .dropdown-content
               %button.btn.btn-primary
                 Create
@@ -393,43 +392,20 @@
   .example
     %div
       .dropdown.inline
-        %button#js-project-dropdown.dropdown-menu-toggle{type: 'button', data: {toggle: 'dropdown'}}
+        %button#js-project-dropdown.dropdown-menu-toggle{ type: 'button', data: { toggle: 'dropdown' } }
           Projects
           = icon('chevron-down')
         .dropdown-menu.dropdown-select.dropdown-menu-selectable
           .dropdown-title
             %span Go to project
-            %button.dropdown-title-button.dropdown-menu-close{aria: {label: "Close"}}
+            %button.dropdown-title-button.dropdown-menu-close{ aria: { label: "Close" } }
               = icon('times')
           .dropdown-input
-            %input.dropdown-input-field{type: "search", placeholder: "Filter results"}
+            %input.dropdown-input-field{ type: "search", placeholder: "Filter results" }
             = icon('search')
           .dropdown-content
           .dropdown-loading
             = icon('spinner spin')
-    :javascript
-      $('#js-project-dropdown').glDropdown({
-        data: function (term, callback) {
-          Api.projects(term, "last_activity_at", function (data) {
-            callback(data);
-          });
-        },
-        text: function (project) {
-          return project.name_with_namespace || project.name;
-        },
-        selectable: true,
-        fieldName: "author_id",
-        filterable: true,
-        search: {
-          fields: ['name_with_namespace']
-        },
-        id: function (data) {
-          return data.id;
-        },
-        isSelected: function (data) {
-          return data.id === 2;
-        }
-      })
 
   .example
     %div
@@ -439,35 +415,33 @@
 
   .row
     .col-md-6
-      .panel.panel-success
-        .panel-heading Success
-        .panel-body
+      .card.bg-success
+        .card-header Success
+        .card-body
           = lorem
-      .panel.panel-primary
-        .panel-heading Primary
-        .panel-body
+      .card.bg-primary
+        .card-header Primary
+        .card-body
           = lorem
-      .panel.panel-info
-        .panel-heading Info
-        .panel-body
+      .card.bg-info
+        .card-header Info
+        .card-body
           = lorem
     .col-md-6
-      .panel.panel-warning
-        .panel-heading Warning
-        .panel-body
+      .card.bg-warning
+        .card-header Warning
+        .card-body
           = lorem
-      .panel.panel-danger
-        .panel-heading Danger
-        .panel-body
+      .card.bg-danger
+        .card-header Danger
+        .card-body
           = lorem
 
-  %h2#alert Alerts
+  %h2#alerts Alerts
 
   .row
     .col-md-6
       .alert.alert-success
-        = lorem
-      .alert.alert-primary
         = lorem
       .alert.alert-info
         = lorem
@@ -484,24 +458,24 @@
     %code form.horizontal-form
 
   .example
-    %form.form-horizontal
-      .form-group
-        %label.col-sm-2.control-label{:for => "inputEmail3"} Email
+    %form
+      .form-group.row
+        %label.col-sm-2.col-form-label{ :for => "inputEmail3" } Email
         .col-sm-10
-          %input#inputEmail3.form-control{:placeholder => "Email", :type => "email"}/
-      .form-group
-        %label.col-sm-2.control-label{:for => "inputPassword3"} Password
+          %input#inputEmail3.form-control{ :placeholder => "Email", :type => "email" }/
+      .form-group.row
+        %label.col-sm-2.col-form-label{ :for => "inputPassword3" } Password
         .col-sm-10
-          %input#inputPassword3.form-control{:placeholder => "Password", :type => "password"}/
-      .form-group
-        .col-sm-offset-2.col-sm-10
-          .checkbox
-            %label
-              %input{:type => "checkbox"}/
+          %input#inputPassword3.form-control{ :placeholder => "Password", :type => "password" }/
+      .form-group.row
+        .offset-sm-2.col-sm-10
+          .form-check
+            %input.form-check-input{ :type => "checkbox" }/
+            %label.form-check-label
               Remember me
-      .form-group
-        .col-sm-offset-2.col-sm-10
-          %button.btn.btn-default{:type => "submit"} Sign in
+      .form-group.row
+        .offset-sm-2.col-sm-10
+          %button.btn.btn-default{ :type => "submit" } Sign in
 
   .lead
     Form when label rendered above input
@@ -510,25 +484,25 @@
   .example
     %form
       .form-group
-        %label{:for => "exampleInputEmail1"} Email address
-        %input#exampleInputEmail1.form-control{:placeholder => "Enter email", :type => "email"}/
+        %label{ :for => "exampleInputEmail1" } Email address
+        %input#exampleInputEmail1.form-control{ :placeholder => "Enter email", :type => "email" }/
       .form-group
-        %label{:for => "exampleInputPassword1"} Password
-        %input#exampleInputPassword1.form-control{:placeholder => "Password", :type => "password"}/
-      .checkbox
-        %label
-          %input{:type => "checkbox"}/
+        %label{ :for => "exampleInputPassword1" } Password
+        %input#exampleInputPassword1.form-control{ :placeholder => "Password", :type => "password" }/
+      .form-check
+        %input.form-check-input{ :type => "checkbox" }/
+        %label.form-check-label
           Remember me
-      %button.btn.btn-default{:type => "submit"} Sign in
+      %button.btn.btn-default{ :type => "submit" } Sign in
 
   %h2#file File
   %h4
     %code .file-holder
 
-  - blob = Snippet.new(content: "Wow\nSuch\nFile")
+  - blob = Snippet.new(content: "Wow\nSuch\nFile").blob
   .example
     .file-holder
-      .file-title
+      .js-file-title.file-title
         Awesome file
         .file-actions
           .btn-group
@@ -549,4 +523,4 @@
     %li wiki page
     %li help page
 
-  You can check how markdown rendered at #{link_to 'Markdown help page', help_page_path("markdown", "markdown")}.
+  You can check how markdown rendered at #{link_to 'Markdown help page', help_page_path("user/markdown")}.

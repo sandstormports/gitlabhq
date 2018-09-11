@@ -1,17 +1,17 @@
 .file-content.code {
-  border: none;
+  border: 0;
   box-shadow: none;
   margin: 0;
   padding: 0;
   table-layout: fixed;
 
   pre {
-    padding: 10px;
-    border: none;
+    padding: 10px 0;
+    border: 0;
     border-radius: 0;
-    font-family: $monospace_font;
-    font-size: $code_font_size !important;
-    line-height: $code_line_height !important;
+    font-family: $monospace-font;
+    font-size: $code-font-size;
+    line-height: 19px;
     margin: 0;
     overflow: auto;
     overflow-y: hidden;
@@ -20,13 +20,20 @@
     border-left: 1px solid;
 
     code {
-      font-family: $monospace_font;
-      white-space: pre;
+      display: inline-block;
+      min-width: 100%;
+      font-family: $monospace-font;
+      white-space: normal;
       word-wrap: normal;
       padding: 0;
 
       .line {
-        display: inline-block;
+        display: block;
+        width: 100%;
+        min-height: 19px;
+        padding-left: 10px;
+        padding-right: 10px;
+        white-space: pre;
       }
     }
   }
@@ -37,10 +44,10 @@
     float: left;
 
     a {
-      font-family: $monospace_font;
+      font-family: $monospace-font;
       display: block;
       font-size: $code_font_size !important;
-      line-height: $code_line_height !important;
+      min-height: 19px;
       white-space: nowrap;
 
       i {
@@ -50,8 +57,13 @@
         visibility: hidden;
       }
 
-      &:hover i {
-        visibility: visible;
+      &:hover,
+      &:focus {
+        outline: none;
+
+        i {
+          visibility: visible;
+        }
       }
     }
   }

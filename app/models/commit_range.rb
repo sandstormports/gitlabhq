@@ -1,15 +1,15 @@
+# frozen_string_literal: true
+
 # CommitRange makes it easier to work with commit ranges
 #
 # Examples:
 #
 #   range = CommitRange.new('f3f85602...e86e1013', project)
 #   range.exclude_start?  # => false
-#   range.reference_title # => "Commits f3f85602 through e86e1013"
 #   range.to_s            # => "f3f85602...e86e1013"
 #
 #   range = CommitRange.new('f3f856029bc5f966c5a7ee24cf7efefdd20e6019..e86e1013709735be5bb767e2b228930c543f25ae', project)
 #   range.exclude_start?  # => true
-#   range.reference_title # => "Commits f3f85602^ through e86e1013"
 #   range.to_param        # => {from: "f3f856029bc5f966c5a7ee24cf7efefdd20e6019^", to: "e86e1013709735be5bb767e2b228930c543f25ae"}
 #   range.to_s            # => "f3f85602..e86e1013"
 #
@@ -23,7 +23,7 @@ class CommitRange
   attr_reader :commit_from, :notation, :commit_to
   attr_reader :ref_from, :ref_to
 
-  # Optional Project model
+  # The Project model
   attr_accessor :project
 
   # The beginning and ending refs can be named or SHAs, and
@@ -56,13 +56,13 @@ class CommitRange
   # Initialize a CommitRange
   #
   # range_string - The String commit range.
-  # project      - An optional Project model.
+  # project      - The Project model.
   #
   # Raises ArgumentError if `range_string` does not match `PATTERN`.
   def initialize(range_string, project)
     @project = project
 
-    range_string.strip!
+    range_string = range_string.strip
 
     unless range_string =~ /\A#{PATTERN}\z/
       raise ArgumentError, "invalid CommitRange string format: #{range_string}"
@@ -82,7 +82,7 @@ class CommitRange
   end
 
   def inspect
-    %(#<#{self.class}:#{object_id} #{to_s}>)
+    %(#<#{self.class}:#{object_id} #{self}>)
   end
 
   def to_s
@@ -91,27 +91,25 @@ class CommitRange
 
   alias_method :id, :to_s
 
-  def to_reference(from_project = nil)
-    if cross_project_reference?(from_project)
-      project.to_reference + self.class.reference_prefix + self.id
+  def to_reference(from = nil, full: false)
+    project_reference = project.to_reference(from, full: full)
+
+    if project_reference.present?
+      project_reference + self.class.reference_prefix + self.id
     else
       self.id
     end
   end
 
-  def reference_link_text(from_project = nil)
-    reference = ref_from + notation + ref_to
+  def reference_link_text(from = nil)
+    project_reference = project.to_reference(from)
+    reference         = ref_from + notation + ref_to
 
-    if cross_project_reference?(from_project)
-      reference = project.to_reference + self.class.reference_prefix + reference
+    if project_reference.present?
+      project_reference + self.class.reference_prefix + reference
+    else
+      reference
     end
-
-    reference
-  end
-
-  # Returns a String for use in a link's title attribute
-  def reference_title
-    "Commits #{sha_start} through #{sha_to}"
   end
 
   # Return a Hash of parameters for passing to a URL helper

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Banzai
   module Filter
     # Base class for GitLab Flavored Markdown reference filters.
@@ -8,24 +10,10 @@ module Banzai
     #   :project (required) - Current project, ignored if reference is cross-project.
     #   :only_path          - Generate path-only links.
     class ReferenceFilter < HTML::Pipeline::Filter
-      def self.user_can_see_reference?(user, node, context)
-        if node.has_attribute?('data-project')
-          project_id = node.attr('data-project').to_i
-          return true if project_id == context[:project].try(:id)
+      include RequestStoreReferenceCache
 
-          project = Project.find(project_id) rescue nil
-          Ability.abilities.allowed?(user, :read_project, project)
-        else
-          true
-        end
-      end
-
-      def self.user_can_reference?(user, node, context)
-        true
-      end
-
-      def self.referenced_by(node)
-        raise NotImplementedError, "#{self} does not implement #{__method__}"
+      class << self
+        attr_accessor :reference_type
       end
 
       # Returns a data attribute String to attach to a reference link
@@ -36,16 +24,22 @@ module Banzai
       # Examples:
       #
       #   data_attribute(project: 1, issue: 2)
-      #   # => "data-reference-filter=\"SomeReferenceFilter\" data-project=\"1\" data-issue=\"2\""
+      #   # => "data-reference-type=\"SomeReferenceFilter\" data-project=\"1\" data-issue=\"2\""
       #
       #   data_attribute(project: 3, merge_request: 4)
-      #   # => "data-reference-filter=\"SomeReferenceFilter\" data-project=\"3\" data-merge-request=\"4\""
+      #   # => "data-reference-type=\"SomeReferenceFilter\" data-project=\"3\" data-merge-request=\"4\""
       #
       # Returns a String
       def data_attribute(attributes = {})
-        attributes[:reference_filter] = self.class.name.demodulize
+        attributes = attributes.reject { |_, v| v.nil? }
+
+        attributes[:reference_type] ||= self.class.reference_type
+        attributes[:container] ||= 'body'
+        attributes[:placement] ||= 'bottom'
         attributes.delete(:original) if context[:no_original_data]
-        attributes.map { |key, value| %Q(data-#{key.to_s.dasherize}="#{escape_once(value)}") }.join(" ")
+        attributes.map do |key, value|
+          %Q(data-#{key.to_s.dasherize}="#{escape_once(value)}")
+        end.join(' ')
       end
 
       def escape_once(html)
@@ -65,15 +59,27 @@ module Banzai
         context[:project]
       end
 
-      def reference_class(type)
-        "gfm gfm-#{type}"
+      def group
+        context[:group]
+      end
+
+      def skip_project_check?
+        context[:skip_project_check]
+      end
+
+      def reference_class(type, tooltip: true)
+        gfm_klass = "gfm gfm-#{type}"
+
+        return gfm_klass unless tooltip
+
+        "#{gfm_klass} has-tooltip"
       end
 
       # Ensure that a :project key exists in context
       #
       # Note that while the key might exist, its value could be nil!
       def validate
-        needs :project
+        needs :project unless skip_project_check?
       end
 
       # Iterates over all <a> and text() nodes in a document.
@@ -82,6 +88,8 @@ module Banzai
       # by `ignore_ancestor_query`. Link tags are not processed if they have a
       # "gfm" class or the "href" attribute is empty.
       def each_node
+        return to_enum(__method__) unless block_given?
+
         query = %Q{descendant-or-self::text()[not(#{ignore_ancestor_query})]
         | descendant-or-self::a[
           not(contains(concat(" ", @class, " "), " gfm ")) and not(@href = "")
@@ -92,14 +100,19 @@ module Banzai
         end
       end
 
-      # Yields the link's URL and text whenever the node is a valid <a> tag.
+      # Returns an Array containing all HTML nodes.
+      def nodes
+        @nodes ||= each_node.to_a
+      end
+
+      # Yields the link's URL and inner HTML whenever the node is a valid <a> tag.
       def yield_valid_link(node)
         link = CGI.unescape(node.attr('href').to_s)
-        text = node.text
+        inner_html = node.inner_html
 
         return unless link.force_encoding('UTF-8').valid_encoding?
 
-        yield link, text
+        yield link, inner_html
       end
 
       def replace_text_when_pattern_matches(node, pattern)

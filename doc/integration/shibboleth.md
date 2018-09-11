@@ -2,7 +2,7 @@
 
 This documentation is for enabling shibboleth with omnibus-gitlab package.
 
-In order to enable Shibboleth support in gitlab we need to use Apache instead of Nginx (It may be possible to use Nginx, however I did not found way to easily configure Nginx that is bundled in omnibus-gitlab package). Apache uses mod_shib2 module for shibboleth authentication and can pass attributes as headers to omniauth-shibboleth provider.
+In order to enable Shibboleth support in gitlab we need to use Apache instead of Nginx (It may be possible to use Nginx, however this is difficult to configure using the bundled Nginx provided in the omnibus-gitlab package). Apache uses mod_shib2 module for shibboleth authentication and can pass attributes as headers to omniauth-shibboleth provider.
 
 
 To enable the Shibboleth OmniAuth provider you must:
@@ -10,7 +10,7 @@ To enable the Shibboleth OmniAuth provider you must:
 1. Configure Apache shibboleth module. Installation and configuration of module it self is out of scope of this document.
 Check https://wiki.shibboleth.net/ for more info.
 
-1. You can find Apache config in gitlab-recipes (https://github.com/gitlabhq/gitlab-recipes/blob/master/web-server/apache/gitlab-ssl.conf)
+1. You can find Apache config in gitlab-recipes (https://gitlab.com/gitlab-org/gitlab-recipes/tree/master/web-server/apache)
 
 Following changes are needed to enable shibboleth:
 
@@ -43,7 +43,19 @@ exclude shibboleth URLs from rewriting, add "RewriteCond %{REQUEST_URI} !/Shibbo
   RequestHeader set X_FORWARDED_PROTO 'https'
 ```
 
-1.  Edit /etc/gitlab/gitlab.rb configuration file, your shibboleth attributes should be in form of "HTTP_ATTRIBUTE" and you should addjust them to your need and environment. Add any other configuration you need.
+1. Edit /etc/gitlab/gitlab.rb configuration file to enable OmniAuth and add
+Shibboleth as an OmniAuth provider. User attributes will be sent from the
+Apache reverse proxy to GitLab as headers with the names from the Shibboleth
+attribute mapping. Therefore the values of the `args` hash
+should be in the form of `"HTTP_ATTRIBUTE"`. The keys in the hash are arguments
+to the [OmniAuth::Strategies::Shibboleth class](https://github.com/toyokazu/omniauth-shibboleth/blob/master/lib/omniauth/strategies/shibboleth.rb)
+and are documented by the [omniauth-shibboleth gem](https://github.com/toyokazu/omniauth-shibboleth)
+(take care to note the version of the gem packaged with GitLab). If some of
+your users appear to be authenticated by Shibboleth and Apache, but GitLab
+rejects their account with a URI that contains "e-mail is invalid" then your
+Shibboleth Identity Provider or Attribute Authority may be asserting multiple
+e-mail addresses. In this instance, you might consider setting the
+`multi_values` argument to `first`.
 
 File should look like this:
 ```
@@ -58,22 +70,22 @@ gitlab_rails['omniauth_block_auto_created_users'] = false
 gitlab_rails['omniauth_enabled'] = true
 gitlab_rails['omniauth_providers'] = [
   {
-    "name" => 'shibboleth',
-        "args" => {
-        "shib_session_id_field" => "HTTP_SHIB_SESSION_ID",
+    "name"  => "'shibboleth"',
+    "label" => "Text for Login Button",
+    "args"  => {
+        "shib_session_id_field"     => "HTTP_SHIB_SESSION_ID",
         "shib_application_id_field" => "HTTP_SHIB_APPLICATION_ID",
-        "uid_field" => 'HTTP_EPPN',
-        "name_field" => 'HTTP_CN',
+        "uid_field"                 => 'HTTP_EPPN',
+        "name_field"                => 'HTTP_CN',
         "info_fields" => { "email" => 'HTTP_MAIL'}
-        }
+    }
   }
 ]
 
 ```
-1. Save changes and reconfigure gitlab:
-```
-sudo gitlab-ctl reconfigure
-```
+
+1. [Reconfigure][] or [restart GitLab][] for the changes to take effect if you
+   installed GitLab via Omnibus or from source respectively.
 
 On the sign in page there should now be a "Sign in with: Shibboleth" icon below the regular sign in form. Click the icon to begin the authentication process. You will be redirected to IdP server (Depends on your Shibboleth module configuration). If everything goes well the user will be returned to GitLab and will be signed in.
 
@@ -108,7 +120,7 @@ you will not get a shibboleth session!
   RewriteEngine on
 
   #Don't escape encoded characters in api requests
-  RewriteCond %{REQUEST_URI} ^/api/v3/.*
+  RewriteCond %{REQUEST_URI} ^/api/v4/.*
   RewriteCond %{REQUEST_URI} !/Shibboleth.sso
   RewriteCond %{REQUEST_URI} !/shibboleth-sp
   RewriteRule .* http://127.0.0.1:8181%{REQUEST_URI} [P,QSA,NE]
@@ -123,3 +135,6 @@ you will not get a shibboleth session!
   RequestHeader set X_FORWARDED_PROTO 'https'
   RequestHeader set X-Forwarded-Ssl on
 ```
+
+[reconfigure]: ../administration/restart_gitlab.md#omnibus-gitlab-reconfigure
+[restart GitLab]: ../administration/restart_gitlab.md#installations-from-source

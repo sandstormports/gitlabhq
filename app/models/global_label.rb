@@ -1,8 +1,14 @@
+# frozen_string_literal: true
+
 class GlobalLabel
   attr_accessor :title, :labels
   alias_attribute :name, :title
 
-  delegate :color, :description, to: :@first_label
+  delegate :color, :text_color, :description, to: :@first_label
+
+  def for_display
+    @first_label
+  end
 
   def self.build_collection(labels)
     labels = labels.group_by(&:title)

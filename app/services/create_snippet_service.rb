@@ -1,10 +1,16 @@
+# frozen_string_literal: true
+
 class CreateSnippetService < BaseService
+  include SpamCheckService
+
   def execute
-    if project.nil?
-      snippet = PersonalSnippet.new(params)
-    else
-      snippet = project.snippets.build(params)
-    end
+    filter_spam_check_params
+
+    snippet = if project
+                project.snippets.build(params)
+              else
+                PersonalSnippet.new(params)
+              end
 
     unless Gitlab::VisibilityLevel.allowed_for?(current_user, params[:visibility_level])
       deny_visibility_level(snippet)
@@ -13,7 +19,12 @@ class CreateSnippetService < BaseService
 
     snippet.author = current_user
 
-    snippet.save
+    spam_check(snippet, current_user)
+
+    if snippet.save
+      UserAgentDetailService.new(snippet, @request).create
+    end
+
     snippet
   end
 end

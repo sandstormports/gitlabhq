@@ -2,19 +2,17 @@
 
 Import projects from GitLab.com and login to your GitLab instance with your GitLab.com account.
 
-To enable the GitLab.com OmniAuth provider you must register your application with GitLab.com. 
+To enable the GitLab.com OmniAuth provider you must register your application with GitLab.com.
 GitLab.com will generate an application ID and secret key for you to use.
 
 1.  Sign in to GitLab.com
 
-1.  Navigate to your profile settings.
+1. On the upper right corner, click on your avatar and go to your **Settings**.
 
-1.  Select "Applications" in the left menu.
+1.  Select **Applications** in the left menu.
 
-1.  Select "New application".
-
-1.  Provide the required details.
-    - Name: This can be anything. Consider something like "\<Organization\>'s GitLab" or "\<Your Name\>'s GitLab" or something else descriptive.
+1.  Provide the required details for **Add new application**.
+    - Name: This can be anything. Consider something like `<Organization>'s GitLab` or `<Your Name>'s GitLab` or something else descriptive.
     - Redirect URI:
 
     ```
@@ -24,10 +22,10 @@ GitLab.com will generate an application ID and secret key for you to use.
 
     The first link is required for the importer and second for the authorization.
 
-1.  Select "Submit".
+1.  Select **Save application**.
 
-1.  You should now see a Client ID and Client Secret near the top right of the page (see screenshot). 
-    Keep this page open as you continue configuration. 
+1.  You should now see a **Application Id** and **Secret** near the top right of the page (see screenshot).
+    Keep this page open as you continue configuration.
     ![GitLab app](img/gitlab_app.png)
 
 1.  On your GitLab server, open the configuration file.
@@ -77,8 +75,12 @@ GitLab.com will generate an application ID and secret key for you to use.
 
 1.  Save the configuration file.
 
-1.  Restart GitLab for the changes to take effect.
+1.  [Reconfigure][] or [restart GitLab][] for the changes to take effect if you
+    installed GitLab via Omnibus or from source respectively.
 
-On the sign in page there should now be a GitLab.com icon below the regular sign in form. 
-Click the icon to begin the authentication process. GitLab.com will ask the user to sign in and authorize the GitLab application. 
+On the sign in page there should now be a GitLab.com icon below the regular sign in form.
+Click the icon to begin the authentication process. GitLab.com will ask the user to sign in and authorize the GitLab application.
 If everything goes well the user will be returned to your GitLab instance and will be signed in.
+
+[reconfigure]: ../administration/restart_gitlab.md#omnibus-gitlab-reconfigure
+[restart GitLab]: ../administration/restart_gitlab.md#installations-from-source

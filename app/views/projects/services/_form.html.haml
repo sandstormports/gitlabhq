@@ -1,18 +1,22 @@
-%h3.page-title
-  = @service.title
-  = boolean_to_icon @service.activated?
+.row.prepend-top-default.append-bottom-default
+  .col-lg-3
+    %h4.prepend-top-0
+      = @service.title
+      = boolean_to_icon @service.activated?
 
-%p= @service.description
+    %p= @service.description
 
-%hr
+    - if @service.respond_to?(:detailed_description)
+      %p= @service.detailed_description
+  .col-lg-9
+    = form_for(@service, as: :service, url: project_service_path(@project, @service.to_param), method: :put, html: { class: 'gl-show-field-errors integration-settings-form js-integration-settings-form', data: { 'can-test' => @service.can_test?, 'test-url' => test_project_service_path(@project, @service) } }) do |form|
+      = render 'shared/service_settings', form: form, subject: @service
+      - if @service.editable?
+        .footer-block.row-content-block
+          = service_save_button(@service)
+          &nbsp;
+          = link_to 'Cancel', project_settings_integrations_path(@project), class: 'btn btn-cancel'
 
-= form_for(@service, as: :service, url: namespace_project_service_path(@project.namespace, @project, @service.to_param), method: :put, html: { class: 'form-horizontal' }) do |form|
-  = render 'shared/service_settings', form: form
-
-  .form-actions
-    = form.submit 'Save changes', class: 'btn btn-save'
-    &nbsp;
-    - if @service.valid? && @service.activated?
-      - disabled = @service.can_test? ? '':'disabled'
-      = link_to 'Test settings', test_namespace_project_service_path(@project.namespace, @project, @service.to_param), class: "btn #{disabled}"
-    = link_to "Cancel", namespace_project_services_path(@project.namespace, @project), class: "btn btn-cancel"
+- if lookup_context.template_exists?('show', "projects/services/#{@service.to_param}", true)
+  %hr
+  = render "projects/services/#{@service.to_param}/show"

@@ -1,38 +1,9 @@
-# == Schema Information
-#
-# Table name: merge_requests
-#
-#  id                        :integer          not null, primary key
-#  target_branch             :string(255)      not null
-#  source_branch             :string(255)      not null
-#  source_project_id         :integer          not null
-#  author_id                 :integer
-#  assignee_id               :integer
-#  title                     :string(255)
-#  created_at                :datetime
-#  updated_at                :datetime
-#  milestone_id              :integer
-#  state                     :string(255)
-#  merge_status              :string(255)
-#  target_project_id         :integer          not null
-#  iid                       :integer
-#  description               :text
-#  position                  :integer          default(0)
-#  locked_at                 :datetime
-#  updated_by_id             :integer
-#  merge_error               :string(255)
-#  merge_params              :text
-#  merge_when_build_succeeds :boolean          default(FALSE), not null
-#  merge_user_id             :integer
-#  merge_commit_sha          :string
-#
-
-FactoryGirl.define do
+FactoryBot.define do
   factory :merge_request do
-    title
-    author
-    source_project factory: :project
+    title { generate(:title) }
+    association :source_project, :repository, factory: :project
     target_project { source_project }
+    author { source_project.creator }
 
     # $ git log --pretty=oneline feature..master
     # 5937ac0a7beb003549fc5fd26fc247adbce4a52e Add submodule from gitlab.com
@@ -51,6 +22,11 @@ FactoryGirl.define do
     trait :with_diffs do
     end
 
+    trait :with_image_diffs do
+      source_branch "add_images_and_changes"
+      target_branch "master"
+    end
+
     trait :without_diffs do
       source_branch "improve/awesome"
       target_branch "master"
@@ -65,12 +41,26 @@ FactoryGirl.define do
       state :merged
     end
 
+    trait :merged_target do
+      source_branch "merged-target"
+      target_branch "improve/awesome"
+    end
+
     trait :closed do
       state :closed
     end
 
-    trait :reopened do
-      state :reopened
+    trait :opened do
+      state :opened
+    end
+
+    trait :invalid do
+      source_branch "feature_one"
+      target_branch "feature_two"
+    end
+
+    trait :locked do
+      state :locked
     end
 
     trait :simple do
@@ -88,14 +78,63 @@ FactoryGirl.define do
       target_branch "master"
     end
 
-    trait :merge_when_build_succeeds do
-      merge_when_build_succeeds true
+    trait :merge_when_pipeline_succeeds do
+      merge_when_pipeline_succeeds true
       merge_user author
+    end
+
+    trait :remove_source_branch do
+      merge_params do
+        { 'force_remove_source_branch' => '1' }
+      end
+    end
+
+    trait :with_test_reports do
+      after(:build) do |merge_request|
+        merge_request.head_pipeline = build(
+          :ci_pipeline,
+          :success,
+          :with_test_reports,
+          project: merge_request.source_project,
+          ref: merge_request.source_branch,
+          sha: merge_request.diff_head_sha)
+      end
+    end
+
+    after(:build) do |merge_request|
+      target_project = merge_request.target_project
+      source_project = merge_request.source_project
+
+      # Fake `fetch_ref!` if we don't have repository
+      # We have too many existing tests replying on this behaviour
+      unless [target_project, source_project].all?(&:repository_exists?)
+        allow(merge_request).to receive(:fetch_ref!)
+      end
+    end
+
+    after(:create) do |merge_request, evaluator|
+      merge_request.cache_merge_request_closes_issues!
     end
 
     factory :merged_merge_request, traits: [:merged]
     factory :closed_merge_request, traits: [:closed]
-    factory :reopened_merge_request, traits: [:reopened]
+    factory :reopened_merge_request, traits: [:opened]
+    factory :invalid_merge_request, traits: [:invalid]
     factory :merge_request_with_diffs, traits: [:with_diffs]
+    factory :merge_request_with_diff_notes do
+      after(:create) do |mr|
+        create(:diff_note_on_merge_request, noteable: mr, project: mr.source_project)
+      end
+    end
+
+    factory :labeled_merge_request do
+      transient do
+        labels []
+      end
+
+      after(:create) do |merge_request, evaluator|
+        merge_request.update(labels: evaluator.labels)
+      end
+    end
   end
 end

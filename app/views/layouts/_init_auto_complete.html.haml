@@ -1,6 +1,11 @@
-- project = @target_project || @project
+- object = @target_project || @project || @group
+- noteable_type = @noteable.class if @noteable.present?
 
-- if @noteable
+- datasources = autocomplete_data_sources(object, noteable_type)
+
+- if object
+  -# haml-lint:disable InlineJavaScript
   :javascript
-    GitLab.GfmAutoComplete.dataSource = "#{autocomplete_sources_namespace_project_path(project.namespace, project, type: @noteable.class, type_id: params[:id])}"
-    GitLab.GfmAutoComplete.setup();
+    gl = window.gl || {};
+    gl.GfmAutoComplete = gl.GfmAutoComplete || {};
+    gl.GfmAutoComplete.dataSources = #{datasources.to_json};

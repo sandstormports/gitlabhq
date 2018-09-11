@@ -5,6 +5,8 @@ describe 'devise/shared/_signin_box' do
     before do
       stub_devise
       assign(:ldap_servers, [])
+      allow(view).to receive(:current_application_settings).and_return(Gitlab::CurrentSettings.current_application_settings)
+      allow(view).to receive(:captcha_enabled?).and_return(false)
     end
 
     it 'is shown when Crowd is enabled' do
@@ -12,13 +14,13 @@ describe 'devise/shared/_signin_box' do
 
       render
 
-      expect(rendered).to have_selector('#tab-crowd form')
+      expect(rendered).to have_selector('#crowd form')
     end
 
     it 'is not shown when Crowd is disabled' do
       render
 
-      expect(rendered).not_to have_selector('#tab-crowd')
+      expect(rendered).not_to have_selector('#crowd')
     end
   end
 
@@ -31,7 +33,7 @@ describe 'devise/shared/_signin_box' do
   def enable_crowd
     allow(view).to receive(:form_based_providers).and_return([:crowd])
     allow(view).to receive(:crowd_enabled?).and_return(true)
-    allow(view).to receive(:user_omniauth_authorize_path).with('crowd').
-      and_return('/crowd')
+    allow(view).to receive(:omniauth_authorize_path).with(:user, :crowd)
+      .and_return('/crowd')
   end
 end

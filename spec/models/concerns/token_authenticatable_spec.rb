@@ -6,12 +6,13 @@ shared_examples 'TokenAuthenticatable' do
     it { expect(described_class).to be_private_method_defined(:write_new_token) }
     it { expect(described_class).to respond_to("find_by_#{token_field}") }
     it { is_expected.to respond_to("ensure_#{token_field}") }
+    it { is_expected.to respond_to("set_#{token_field}") }
     it { is_expected.to respond_to("reset_#{token_field}!") }
   end
 end
 
 describe User, 'TokenAuthenticatable' do
-  let(:token_field) { :authentication_token }
+  let(:token_field) { :feed_token }
   it_behaves_like 'TokenAuthenticatable'
 
   describe 'ensures authentication token' do
@@ -28,31 +29,40 @@ describe ApplicationSetting, 'TokenAuthenticatable' do
     context 'token is not generated yet' do
       describe 'token field accessor' do
         subject { described_class.new.send(token_field) }
-        it { is_expected.to_not be_blank }
+        it { is_expected.not_to be_blank }
       end
 
       describe 'ensured token' do
         subject { described_class.new.send("ensure_#{token_field}") }
 
         it { is_expected.to be_a String }
-        it { is_expected.to_not be_blank }
+        it { is_expected.not_to be_blank }
       end
 
       describe 'ensured! token' do
         subject { described_class.new.send("ensure_#{token_field}!") }
 
-        it 'should persist new token' do
+        it 'persists new token' do
           expect(subject).to eq described_class.current[token_field]
         end
       end
     end
 
     context 'token is generated' do
-      before { subject.send("reset_#{token_field}!") }
-      it 'persists a new token 'do
+      before do
+        subject.send("reset_#{token_field}!")
+      end
+
+      it 'persists a new token' do
         expect(subject.send(:read_attribute, token_field)).to be_a String
       end
     end
+  end
+
+  describe 'setting new token' do
+    subject { described_class.new.send("set_#{token_field}", '0123456789') }
+
+    it { is_expected.to eq '0123456789' }
   end
 
   describe 'multiple token fields' do

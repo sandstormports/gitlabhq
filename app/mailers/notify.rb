@@ -1,16 +1,23 @@
 class Notify < BaseMailer
   include ActionDispatch::Routing::PolymorphicRoutes
+  include GitlabRoutingHelper
 
   include Emails::Issues
   include Emails::MergeRequests
   include Emails::Notes
+  include Emails::PagesDomains
   include Emails::Projects
   include Emails::Profile
-  include Emails::Groups
-  include Emails::Builds
+  include Emails::Pipelines
+  include Emails::Members
 
-  add_template_helper MergeRequestsHelper
-  add_template_helper EmailsHelper
+  helper MergeRequestsHelper
+  helper DiffHelper
+  helper BlobHelper
+  helper EmailsHelper
+  helper MembersHelper
+  helper AvatarsHelper
+  helper GitlabRoutingHelper
 
   def test_email(recipient_email, subject, body)
     mail(to: recipient_email,
@@ -87,7 +94,9 @@ class Notify < BaseMailer
   def subject(*extra)
     subject = ""
     subject << "#{@project.name} | " if @project
+    subject << "#{@group.name} | " if @group
     subject << extra.join(' | ') if extra.present?
+    subject << " | #{Gitlab.config.gitlab.email_subject_suffix}" if Gitlab.config.gitlab.email_subject_suffix.present?
     subject
   end
 
@@ -101,23 +110,31 @@ class Notify < BaseMailer
 
   def mail_thread(model, headers = {})
     add_project_headers
+    add_unsubscription_headers_and_links
+
     headers["X-GitLab-#{model.class.name}-ID"] = model.id
     headers['X-GitLab-Reply-Key'] = reply_key
 
-    if Gitlab::IncomingEmail.enabled?
-      address = Mail::Address.new(Gitlab::IncomingEmail.reply_address(reply_key))
-      address.display_name = @project.name_with_namespace
+    @reason = headers['X-GitLab-NotificationReason']
 
-      headers['Reply-To'] = address
+    if Gitlab::IncomingEmail.enabled? && @sent_notification
+      headers['Reply-To'] = Mail::Address.new(Gitlab::IncomingEmail.reply_address(reply_key)).tap do |address|
+        address.display_name = reply_display_name(model)
+      end
 
       fallback_reply_message_id = "<reply-#{reply_key}@#{Gitlab.config.gitlab.host}>".freeze
-      headers['References'] ||= ''
-      headers['References'] << ' ' << fallback_reply_message_id
+      headers['References'] ||= []
+      headers['References'].unshift(fallback_reply_message_id)
 
       @reply_by_email = true
     end
 
     mail(headers)
+  end
+
+  # `model` is used on EE code
+  def reply_display_name(_model)
+    @project.full_name
   end
 
   # Send an email that starts a new conversation thread,
@@ -141,9 +158,21 @@ class Notify < BaseMailer
   def mail_answer_thread(model, headers = {})
     headers['Message-ID'] = "<#{SecureRandom.hex}@#{Gitlab.config.gitlab.host}>"
     headers['In-Reply-To'] = message_id(model)
-    headers['References'] = message_id(model)
+    headers['References'] = [message_id(model)]
 
-    headers[:subject].prepend('Re: ') if headers[:subject]
+    headers[:subject]&.prepend('Re: ')
+
+    mail_thread(model, headers)
+  end
+
+  def mail_answer_note_thread(model, note, headers = {})
+    headers['Message-ID'] = message_id(note)
+    headers['In-Reply-To'] = message_id(note.references.last)
+    headers['References'] = note.references.map { |ref| message_id(ref) }
+
+    headers['X-GitLab-Discussion-ID'] = note.discussion.id if note.part_of_discussion?
+
+    headers[:subject]&.prepend('Re: ')
 
     mail_thread(model, headers)
   end
@@ -157,6 +186,18 @@ class Notify < BaseMailer
 
     headers['X-GitLab-Project'] = @project.name
     headers['X-GitLab-Project-Id'] = @project.id
-    headers['X-GitLab-Project-Path'] = @project.path_with_namespace
+    headers['X-GitLab-Project-Path'] = @project.full_path
+  end
+
+  def add_unsubscription_headers_and_links
+    return unless !@labels_url && @sent_notification && @sent_notification.unsubscribable?
+
+    list_unsubscribe_methods = [unsubscribe_sent_notification_url(@sent_notification, force: true)]
+    if Gitlab::IncomingEmail.enabled? && Gitlab::IncomingEmail.supports_wildcard?
+      list_unsubscribe_methods << "mailto:#{Gitlab::IncomingEmail.unsubscribe_address(reply_key)}"
+    end
+
+    headers['List-Unsubscribe'] = list_unsubscribe_methods.map { |e| "<#{e}>" }.join(',')
+    @unsubscribe_url = unsubscribe_sent_notification_url(@sent_notification)
   end
 end

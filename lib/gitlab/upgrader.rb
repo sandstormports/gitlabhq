@@ -1,6 +1,3 @@
-require_relative "popen"
-require_relative "version_info"
-
 module Gitlab
   class Upgrader
     def execute
@@ -12,6 +9,7 @@ module Gitlab
         puts "You are using the latest GitLab version"
       else
         puts "Newer GitLab version is available"
+
         answer = if ARGV.first == "-y"
                    "yes"
                  else
@@ -46,12 +44,12 @@ module Gitlab
       git_tags = fetch_git_tags
       git_tags = git_tags.select { |version| version =~ /v\d+\.\d+\.\d+\Z/ }
       git_versions = git_tags.map { |tag| Gitlab::VersionInfo.parse(tag.match(/v\d+\.\d+\.\d+/).to_s) }
-      "v#{git_versions.sort.last.to_s}"
+      "v#{git_versions.sort.last}"
     end
 
     def fetch_git_tags
       remote_tags, _ = Gitlab::Popen.popen(%W(#{Gitlab.config.git.bin_path} ls-remote --tags https://gitlab.com/gitlab-org/gitlab-ce.git))
-      remote_tags.split("\n").grep(/tags\/v#{current_version.major}/)
+      remote_tags.split("\n").grep(%r{tags/v#{current_version.major}})
     end
 
     def update_commands
@@ -59,21 +57,25 @@ module Gitlab
         "Stash changed files" => %W(#{Gitlab.config.git.bin_path} stash),
         "Get latest code" => %W(#{Gitlab.config.git.bin_path} fetch),
         "Switch to new version" => %W(#{Gitlab.config.git.bin_path} checkout v#{latest_version}),
-        "Install gems" => %W(bundle),
-        "Migrate DB" => %W(bundle exec rake db:migrate),
-        "Recompile assets" => %W(bundle exec rake assets:clean assets:precompile),
-        "Clear cache" => %W(bundle exec rake cache:clear)
+        "Install gems" => %w(bundle),
+        "Migrate DB" => %w(bundle exec rake db:migrate),
+        "Recompile assets" => %w(bundle exec rake yarn:install gitlab:assets:clean gitlab:assets:compile),
+        "Clear cache" => %w(bundle exec rake cache:clear)
       }
     end
 
     def env
-      { 'RAILS_ENV' => 'production' }
+      {
+        'RAILS_ENV' => 'production',
+        'NODE_ENV' => 'production'
+      }
     end
 
     def upgrade
       update_commands.each do |title, cmd|
         puts title
         puts " -> #{cmd.join(' ')}"
+
         if system(env, *cmd)
           puts " -> OK"
         else

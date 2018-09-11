@@ -1,181 +1,194 @@
 require 'spec_helper'
 
-describe API::API, api: true do
-  include ApiHelpers
-
+describe API::Variables do
   let(:user) { create(:user) }
   let(:user2) { create(:user) }
   let!(:project) { create(:project, creator_id: user.id) }
-  let!(:master) { create(:project_member, :master, user: user, project: project) }
+  let!(:maintainer) { create(:project_member, :maintainer, user: user, project: project) }
   let!(:developer) { create(:project_member, :developer, user: user2, project: project) }
   let!(:variable) { create(:ci_variable, project: project) }
 
   describe 'GET /projects/:id/variables' do
     context 'authorized user with proper permissions' do
-      it 'should return project variables' do
+      it 'returns project variables' do
         get api("/projects/#{project.id}/variables", user)
 
-        expect(response.status).to eq(200)
+        expect(response).to have_gitlab_http_status(200)
         expect(json_response).to be_a(Array)
       end
     end
 
     context 'authorized user with invalid permissions' do
-      it 'should not return project variables' do
+      it 'does not return project variables' do
         get api("/projects/#{project.id}/variables", user2)
 
-        expect(response.status).to eq(403)
+        expect(response).to have_gitlab_http_status(403)
       end
     end
 
     context 'unauthorized user' do
-      it 'should not return project variables' do
+      it 'does not return project variables' do
         get api("/projects/#{project.id}/variables")
 
-        expect(response.status).to eq(401)
+        expect(response).to have_gitlab_http_status(401)
       end
     end
   end
 
   describe 'GET /projects/:id/variables/:key' do
     context 'authorized user with proper permissions' do
-      it 'should return project variable details' do
+      it 'returns project variable details' do
         get api("/projects/#{project.id}/variables/#{variable.key}", user)
 
-        expect(response.status).to eq(200)
+        expect(response).to have_gitlab_http_status(200)
         expect(json_response['value']).to eq(variable.value)
+        expect(json_response['protected']).to eq(variable.protected?)
       end
 
-      it 'should respond with 404 Not Found if requesting non-existing variable' do
+      it 'responds with 404 Not Found if requesting non-existing variable' do
         get api("/projects/#{project.id}/variables/non_existing_variable", user)
 
-        expect(response.status).to eq(404)
+        expect(response).to have_gitlab_http_status(404)
       end
     end
 
     context 'authorized user with invalid permissions' do
-      it 'should not return project variable details' do
+      it 'does not return project variable details' do
         get api("/projects/#{project.id}/variables/#{variable.key}", user2)
 
-        expect(response.status).to eq(403)
+        expect(response).to have_gitlab_http_status(403)
       end
     end
 
     context 'unauthorized user' do
-      it 'should not return project variable details' do
+      it 'does not return project variable details' do
         get api("/projects/#{project.id}/variables/#{variable.key}")
 
-        expect(response.status).to eq(401)
+        expect(response).to have_gitlab_http_status(401)
       end
     end
   end
 
   describe 'POST /projects/:id/variables' do
     context 'authorized user with proper permissions' do
-      it 'should create variable' do
+      it 'creates variable' do
         expect do
-          post api("/projects/#{project.id}/variables", user), key: 'TEST_VARIABLE_2', value: 'VALUE_2'
-        end.to change{project.variables.count}.by(1)
+          post api("/projects/#{project.id}/variables", user), key: 'TEST_VARIABLE_2', value: 'VALUE_2', protected: true
+        end.to change {project.variables.count}.by(1)
 
-        expect(response.status).to eq(201)
+        expect(response).to have_gitlab_http_status(201)
         expect(json_response['key']).to eq('TEST_VARIABLE_2')
         expect(json_response['value']).to eq('VALUE_2')
+        expect(json_response['protected']).to be_truthy
       end
 
-      it 'should not allow to duplicate variable key' do
+      it 'creates variable with optional attributes' do
+        expect do
+          post api("/projects/#{project.id}/variables", user), key: 'TEST_VARIABLE_2', value: 'VALUE_2'
+        end.to change {project.variables.count}.by(1)
+
+        expect(response).to have_gitlab_http_status(201)
+        expect(json_response['key']).to eq('TEST_VARIABLE_2')
+        expect(json_response['value']).to eq('VALUE_2')
+        expect(json_response['protected']).to be_falsey
+      end
+
+      it 'does not allow to duplicate variable key' do
         expect do
           post api("/projects/#{project.id}/variables", user), key: variable.key, value: 'VALUE_2'
-        end.to change{project.variables.count}.by(0)
+        end.to change {project.variables.count}.by(0)
 
-        expect(response.status).to eq(400)
+        expect(response).to have_gitlab_http_status(400)
       end
     end
 
     context 'authorized user with invalid permissions' do
-      it 'should not create variable' do
+      it 'does not create variable' do
         post api("/projects/#{project.id}/variables", user2)
 
-        expect(response.status).to eq(403)
+        expect(response).to have_gitlab_http_status(403)
       end
     end
 
     context 'unauthorized user' do
-      it 'should not create variable' do
+      it 'does not create variable' do
         post api("/projects/#{project.id}/variables")
 
-        expect(response.status).to eq(401)
+        expect(response).to have_gitlab_http_status(401)
       end
     end
   end
 
   describe 'PUT /projects/:id/variables/:key' do
     context 'authorized user with proper permissions' do
-      it 'should update variable data' do
-        initial_variable = project.variables.first
+      it 'updates variable data' do
+        initial_variable = project.variables.reload.first
         value_before = initial_variable.value
 
-        put api("/projects/#{project.id}/variables/#{variable.key}", user), value: 'VALUE_1_UP'
+        put api("/projects/#{project.id}/variables/#{variable.key}", user), value: 'VALUE_1_UP', protected: true
 
-        updated_variable = project.variables.first
+        updated_variable = project.variables.reload.first
 
-        expect(response.status).to eq(200)
+        expect(response).to have_gitlab_http_status(200)
         expect(value_before).to eq(variable.value)
         expect(updated_variable.value).to eq('VALUE_1_UP')
+        expect(updated_variable).to be_protected
       end
 
-      it 'should responde with 404 Not Found if requesting non-existing variable' do
+      it 'responds with 404 Not Found if requesting non-existing variable' do
         put api("/projects/#{project.id}/variables/non_existing_variable", user)
 
-        expect(response.status).to eq(404)
+        expect(response).to have_gitlab_http_status(404)
       end
     end
 
     context 'authorized user with invalid permissions' do
-      it 'should not update variable' do
+      it 'does not update variable' do
         put api("/projects/#{project.id}/variables/#{variable.key}", user2)
 
-        expect(response.status).to eq(403)
+        expect(response).to have_gitlab_http_status(403)
       end
     end
 
     context 'unauthorized user' do
-      it 'should not update variable' do
+      it 'does not update variable' do
         put api("/projects/#{project.id}/variables/#{variable.key}")
 
-        expect(response.status).to eq(401)
+        expect(response).to have_gitlab_http_status(401)
       end
     end
   end
 
   describe 'DELETE /projects/:id/variables/:key' do
     context 'authorized user with proper permissions' do
-      it 'should delete variable' do
+      it 'deletes variable' do
         expect do
           delete api("/projects/#{project.id}/variables/#{variable.key}", user)
-        end.to change{project.variables.count}.by(-1)
-        expect(response.status).to eq(200)
+
+          expect(response).to have_gitlab_http_status(204)
+        end.to change {project.variables.count}.by(-1)
       end
 
-      it 'should responde with 404 Not Found if requesting non-existing variable' do
+      it 'responds with 404 Not Found if requesting non-existing variable' do
         delete api("/projects/#{project.id}/variables/non_existing_variable", user)
 
-        expect(response.status).to eq(404)
+        expect(response).to have_gitlab_http_status(404)
       end
     end
 
     context 'authorized user with invalid permissions' do
-      it 'should not delete variable' do
+      it 'does not delete variable' do
         delete api("/projects/#{project.id}/variables/#{variable.key}", user2)
 
-        expect(response.status).to eq(403)
+        expect(response).to have_gitlab_http_status(403)
       end
     end
 
     context 'unauthorized user' do
-      it 'should not delete variable' do
+      it 'does not delete variable' do
         delete api("/projects/#{project.id}/variables/#{variable.key}")
 
-        expect(response.status).to eq(401)
+        expect(response).to have_gitlab_http_status(401)
       end
     end
   end

@@ -1,20 +1,20 @@
 require 'spec_helper'
 
-feature 'Projects > Members > Anonymous user sees members', feature: true do
+describe 'Projects > Members > Anonymous user sees members' do
   let(:user) { create(:user) }
   let(:group) { create(:group, :public) }
-  let(:project) { create(:empty_project, :public) }
+  let(:project) { create(:project, :public) }
 
-  background do
-    project.team << [user, :master]
+  before do
+    project.add_maintainer(user)
     create(:project_group_link, project: project, group: group)
   end
 
-  scenario "anonymous user visits the project's members page and sees the list of members" do
-    visit namespace_project_project_members_path(project.namespace, project)
+  it "anonymous user visits the project's members page and sees the list of members" do
+    visit project_project_members_path(project)
 
     expect(current_path).to eq(
-      namespace_project_project_members_path(project.namespace, project))
+      project_project_members_path(project))
     expect(page).to have_content(user.name)
   end
 end

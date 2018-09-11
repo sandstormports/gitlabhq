@@ -1,38 +1,33 @@
+# frozen_string_literal: true
+
 module Banzai
   module Filter
     class MarkdownFilter < HTML::Pipeline::TextFilter
       def initialize(text, context = nil, result = nil)
-        super text, context, result
-        @text = @text.delete "\r"
+        super(text, context, result)
+
+        @renderer = renderer(context[:markdown_engine]).new
+        @text = @text.delete("\r")
       end
 
       def call
-        html = self.class.renderer.render(@text)
-        html.rstrip!
-        html
+        @renderer.render(@text).rstrip
       end
 
       private
 
-      def self.redcarpet_options
-        # https://github.com/vmg/redcarpet#and-its-like-really-simple-to-use
-        @redcarpet_options ||= {
-          fenced_code_blocks:  true,
-          footnotes:           true,
-          lax_spacing:         true,
-          no_intra_emphasis:   true,
-          space_after_headers: true,
-          strikethrough:       true,
-          superscript:         true,
-          tables:              true
-        }.freeze
+      DEFAULT_ENGINE = :common_mark
+
+      def engine(engine_from_context)
+        engine_from_context ||= DEFAULT_ENGINE
+
+        engine_from_context.to_s.classify
       end
 
-      def self.renderer
-        @renderer ||= begin
-          renderer = Redcarpet::Render::HTML.new
-          Redcarpet::Markdown.new(renderer, redcarpet_options)
-        end
+      def renderer(engine_from_context)
+        "Banzai::Filter::MarkdownEngines::#{engine(engine_from_context)}".constantize
+      rescue NameError
+        raise NameError, "`#{engine_from_context}` is unknown markdown engine"
       end
     end
   end

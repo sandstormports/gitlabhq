@@ -1,131 +1,197 @@
-# == Schema Information
-#
-# Table name: ci_builds
-#
-#  id                 :integer          not null, primary key
-#  project_id         :integer
-#  status             :string(255)
-#  finished_at        :datetime
-#  trace              :text
-#  created_at         :datetime
-#  updated_at         :datetime
-#  started_at         :datetime
-#  runner_id          :integer
-#  coverage           :float
-#  commit_id          :integer
-#  commands           :text
-#  job_id             :integer
-#  name               :string(255)
-#  deploy             :boolean          default(FALSE)
-#  options            :text
-#  allow_failure      :boolean          default(FALSE), not null
-#  stage              :string(255)
-#  trigger_request_id :integer
-#  stage_idx          :integer
-#  tag                :boolean
-#  ref                :string(255)
-#  user_id            :integer
-#  type               :string(255)
-#  target_url         :string(255)
-#  description        :string(255)
-#  artifacts_file     :text
-#  gl_project_id      :integer
-#
+# frozen_string_literal: true
 
 class CommitStatus < ActiveRecord::Base
+  include HasStatus
+  include Importable
+  include AfterCommitQueue
+  include Presentable
+  include EnumWithNil
+
   self.table_name = 'ci_builds'
 
-  belongs_to :project, class_name: '::Project', foreign_key: :gl_project_id
-  belongs_to :commit, class_name: 'Ci::Commit'
   belongs_to :user
+  belongs_to :project
+  belongs_to :pipeline, class_name: 'Ci::Pipeline', foreign_key: :commit_id
+  belongs_to :auto_canceled_by, class_name: 'Ci::Pipeline'
 
-  validates :commit, presence: true
-  validates :status, inclusion: { in: %w(pending running failed success canceled) }
+  delegate :commit, to: :pipeline
+  delegate :sha, :short_sha, to: :pipeline
 
-  validates_presence_of :name
+  validates :pipeline, presence: true, unless: :importing?
+  validates :name, presence: true, unless: :importing?
 
   alias_attribute :author, :user
+  alias_attribute :pipeline_id, :commit_id
 
-  scope :running, -> { where(status: 'running') }
-  scope :pending, -> { where(status: 'pending') }
-  scope :success, -> { where(status: 'success') }
-  scope :failed, -> { where(status: 'failed')  }
-  scope :running_or_pending, -> { where(status: [:running, :pending]) }
-  scope :finished, -> { where(status: [:success, :failed, :canceled]) }
-  scope :latest, -> { where(id: unscope(:select).select('max(id)').group(:name, :ref)) }
-  scope :ordered, -> { order(:ref, :stage_idx, :name) }
-  scope :for_ref, ->(ref) { where(ref: ref) }
+  scope :failed_but_allowed, -> do
+    where(allow_failure: true, status: [:failed, :canceled])
+  end
 
-  AVAILABLE_STATUSES = ['pending', 'running', 'success', 'failed', 'canceled']
+  scope :exclude_ignored, -> do
+    # We want to ignore failed but allowed to fail jobs.
+    #
+    # TODO, we also skip ignored optional manual actions.
+    where("allow_failure = ? OR status IN (?)",
+      false, all_state_names - [:failed, :canceled, :manual])
+  end
 
-  state_machine :status, initial: :pending do
+  scope :latest, -> { where(retried: [false, nil]) }
+  scope :retried, -> { where(retried: true) }
+  scope :ordered, -> { order(:name) }
+  scope :latest_ordered, -> { latest.ordered.includes(project: :namespace) }
+  scope :retried_ordered, -> { retried.ordered.includes(project: :namespace) }
+  scope :after_stage, -> (index) { where('stage_idx > ?', index) }
+
+  enum_with_nil failure_reason: {
+    unknown_failure: nil,
+    script_failure: 1,
+    api_failure: 2,
+    stuck_or_timeout_failure: 3,
+    runner_system_failure: 4,
+    missing_dependency_failure: 5,
+    runner_unsupported: 6
+  }
+
+  ##
+  # We still create some CommitStatuses outside of CreatePipelineService.
+  #
+  # These are pages deployments and external statuses.
+  #
+  before_create unless: :importing? do
+    Ci::EnsureStageService.new(project, user).execute(self) do |stage|
+      self.run_after_commit { StageUpdateWorker.perform_async(stage.id) }
+    end
+  end
+
+  state_machine :status do
+    event :process do
+      transition [:skipped, :manual] => :created
+    end
+
+    event :enqueue do
+      transition [:created, :skipped, :manual] => :pending
+    end
+
     event :run do
       transition pending: :running
     end
 
+    event :skip do
+      transition [:created, :pending] => :skipped
+    end
+
     event :drop do
-      transition [:pending, :running] => :failed
+      transition [:created, :pending, :running] => :failed
     end
 
     event :success do
-      transition [:pending, :running] => :success
+      transition [:created, :pending, :running] => :success
     end
 
     event :cancel do
-      transition [:pending, :running] => :canceled
+      transition [:created, :pending, :running, :manual] => :canceled
     end
 
-    after_transition pending: :running do |commit_status|
-      commit_status.update_attributes started_at: Time.now
+    before_transition [:created, :skipped, :manual] => :pending do |commit_status|
+      commit_status.queued_at = Time.now
     end
 
-    after_transition any => [:success, :failed, :canceled] do |commit_status|
-      commit_status.update_attributes finished_at: Time.now
+    before_transition [:created, :pending] => :running do |commit_status|
+      commit_status.started_at = Time.now
     end
 
-    after_transition [:pending, :running] => :success do |commit_status|
-      MergeRequests::MergeWhenBuildSucceedsService.new(commit_status.commit.project, nil).trigger(commit_status)
+    before_transition any => [:success, :failed, :canceled] do |commit_status|
+      commit_status.finished_at = Time.now
     end
 
-    state :pending, value: 'pending'
-    state :running, value: 'running'
-    state :failed, value: 'failed'
-    state :success, value: 'success'
-    state :canceled, value: 'canceled'
+    before_transition any => :failed do |commit_status, transition|
+      failure_reason = transition.args.first
+      commit_status.failure_reason = failure_reason
+    end
+
+    after_transition do |commit_status, transition|
+      next unless commit_status.project
+      next if transition.loopback?
+
+      commit_status.run_after_commit do
+        if pipeline_id
+          if complete? || manual?
+            PipelineProcessWorker.perform_async(pipeline_id)
+          else
+            PipelineUpdateWorker.perform_async(pipeline_id)
+          end
+        end
+
+        StageUpdateWorker.perform_async(stage_id)
+        ExpireJobCacheWorker.perform_async(id)
+      end
+    end
+
+    after_transition any => :failed do |commit_status|
+      next unless commit_status.project
+
+      commit_status.run_after_commit do
+        MergeRequests::AddTodoWhenBuildFailsService
+          .new(project, nil).execute(self)
+      end
+    end
   end
 
-  delegate :sha, :short_sha, to: :commit, prefix: false
+  def locking_enabled?
+    status_changed?
+  end
 
-  # TODO: this should be removed with all references
   def before_sha
-    Gitlab::Git::BLANK_SHA
+    pipeline.before_sha || Gitlab::Git::BLANK_SHA
   end
 
-  def started?
-    !pending? && !canceled? && started_at
+  def group_name
+    name.to_s.gsub(%r{\d+[\s:/\\]+\d+\s*}, '').strip
   end
 
-  def active?
-    running? || pending?
-  end
-
-  def complete?
-    canceled? || success? || failed?
-  end
-
-  def ignored?
+  def failed_but_allowed?
     allow_failure? && (failed? || canceled?)
   end
 
   def duration
-    if started_at && finished_at
-      finished_at - started_at
-    elsif started_at
-      Time.now - started_at
-    end
+    calculate_duration
+  end
+
+  def playable?
+    false
+  end
+
+  # To be overriden when inherrited from
+  def retryable?
+    false
+  end
+
+  # To be overriden when inherrited from
+  def cancelable?
+    false
   end
 
   def stuck?
     false
+  end
+
+  def has_trace?
+    false
+  end
+
+  def auto_canceled?
+    canceled? && auto_canceled_by_id?
+  end
+
+  def detailed_status(current_user)
+    Gitlab::Ci::Status::Factory
+      .new(self, current_user)
+      .fabricate!
+  end
+
+  def sortable_name
+    name.to_s.split(/(\d+)/).map do |v|
+      v =~ /\d+/ ? v.to_i : v
+    end
   end
 end

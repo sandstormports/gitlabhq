@@ -1,168 +1,89 @@
 class Projects::NotesController < Projects::ApplicationController
-  # Authorize
+  include RendersNotes
+  include NotesActions
+  include NotesHelper
+  include ToggleAwardEmoji
+
+  before_action :whitelist_query_limiting, only: [:create]
   before_action :authorize_read_note!
   before_action :authorize_create_note!, only: [:create]
-  before_action :authorize_admin_note!, only: [:update, :destroy]
-  before_action :find_current_user_notes, except: [:destroy, :delete_attachment, :award_toggle]
-
-  def index
-    current_fetched_at = Time.now.to_i
-
-    notes_json = { notes: [], last_fetched_at: current_fetched_at }
-
-    @notes.each do |note|
-      next if note.cross_reference_not_visible_for?(current_user)
-
-      notes_json[:notes] << note_json(note)
-    end
-
-    render json: notes_json
-  end
-
-  def create
-    @note = Notes::CreateService.new(project, current_user, note_params).execute
-
-    respond_to do |format|
-      format.json { render json: note_json(@note) }
-      format.html { redirect_back_or_default }
-    end
-  end
-
-  def update
-    @note = Notes::UpdateService.new(project, current_user, note_params).execute(note)
-
-    respond_to do |format|
-      format.json { render json: note_json(@note) }
-      format.html { redirect_back_or_default }
-    end
-  end
-
-  def destroy
-    if note.editable?
-      Notes::DeleteService.new(project, current_user).execute(note)
-    end
-
-    respond_to do |format|
-      format.js { render nothing: true }
-    end
-  end
+  before_action :authorize_resolve_note!, only: [:resolve, :unresolve]
 
   def delete_attachment
     note.remove_attachment!
     note.update_attribute(:attachment, nil)
 
     respond_to do |format|
-      format.js { render nothing: true }
+      format.js { head :ok }
     end
   end
 
-  def award_toggle
-    noteable = if note_params[:noteable_type] == "issue"
-                 project.issues.find(note_params[:noteable_id])
-               else
-                 project.merge_requests.find(note_params[:noteable_id])
-               end
+  def resolve
+    return render_404 unless note.resolvable?
 
-    data = {
-      author: current_user,
-      is_award: true,
-      note: note_params[:note].delete(":")
-    }
+    Notes::ResolveService.new(project, current_user).execute(note)
 
-    note = noteable.notes.find_by(data)
+    discussion = note.discussion
 
-    if note
-      note.destroy
+    if serialize_notes?
+      render_json_with_notes_serializer
     else
-      Notes::CreateService.new(project, current_user, note_params).execute
+      render json: {
+        resolved_by: note.resolved_by.try(:name),
+        discussion_headline_html: (view_to_html_string('discussions/_headline', discussion: discussion) if discussion)
+      }
     end
+  end
 
-    render json: { ok: true }
+  def unresolve
+    return render_404 unless note.resolvable?
+
+    note.unresolve!
+
+    discussion = note.discussion
+
+    if serialize_notes?
+      render_json_with_notes_serializer
+    else
+      render json: {
+        discussion_headline_html: (view_to_html_string('discussions/_headline', discussion: discussion) if discussion)
+      }
+    end
   end
 
   private
+
+  def render_json_with_notes_serializer
+    prepare_notes_for_rendering([note])
+
+    render json: note_serializer.represent(note)
+  end
 
   def note
     @note ||= @project.notes.find(params[:id])
   end
 
-  def note_to_html(note)
-    render_to_string(
-      "projects/notes/_note",
-      layout: false,
-      formats: [:html],
-      locals: { note: note }
-    )
-  end
+  alias_method :awardable, :note
 
-  def note_to_discussion_html(note)
-    return unless note.for_diff_line?
-
-    if params[:view] == 'parallel'
-      template = "projects/notes/_diff_notes_with_reply_parallel"
-      locals =
-        if params[:line_type] == 'old'
-          { notes_left: [note], notes_right: [] }
-        else
-          { notes_left: [], notes_right: [note] }
-        end
-    else
-      template = "projects/notes/_diff_notes_with_reply"
-      locals = { notes: [note] }
-    end
-
-    render_to_string(
-      template,
-      layout: false,
-      formats: [:html],
-      locals: locals
-    )
-  end
-
-  def note_to_discussion_with_diff_html(note)
-    return unless note.for_diff_line?
-
-    render_to_string(
-      "projects/notes/_discussion",
-      layout: false,
-      formats: [:html],
-      locals: { discussion_notes: [note] }
-    )
-  end
-
-  def note_json(note)
-    if note.valid?
-      {
-        valid: true,
-        id: note.id,
-        discussion_id: note.discussion_id,
-        html: note_to_html(note),
-        award: note.is_award,
-        note: note.note,
-        discussion_html: note_to_discussion_html(note),
-        discussion_with_diff_html: note_to_discussion_with_diff_html(note)
-      }
-    else
-      {
-        valid: false,
-        award: note.is_award,
-        errors: note.errors
-      }
-    end
+  def finder_params
+    params.merge(last_fetched_at: last_fetched_at)
   end
 
   def authorize_admin_note!
     return access_denied! unless can?(current_user, :admin_note, note)
   end
 
-  def note_params
-    params.require(:note).permit(
-      :note, :noteable, :noteable_id, :noteable_type, :project_id,
-      :attachment, :line_code, :commit_id
-    )
+  def authorize_resolve_note!
+    return access_denied! unless can?(current_user, :resolve_note, note)
   end
 
-  def find_current_user_notes
-    @notes = NotesFinder.new.execute(project, current_user, params)
+  def authorize_create_note!
+    return unless noteable.lockable?
+
+    access_denied! unless can?(current_user, :create_note, noteable)
+  end
+
+  def whitelist_query_limiting
+    Gitlab::QueryLimiting.whitelist('https://gitlab.com/gitlab-org/gitlab-ce/issues/42383')
   end
 end

@@ -1,4 +1,4 @@
-# Repository files
+# Repository files API
 
 **CRUD for repository files**
 
@@ -6,10 +6,16 @@
 
 ## Get file from repository
 
-Allows you to receive information about file in repository like name, size, content. Note that file content is Base64 encoded.
+Allows you to receive information about file in repository like name, size,
+content. Note that file content is Base64 encoded. This endpoint can be accessed
+without authentication if the repository is publicly accessible.
 
 ```
-GET /projects/:id/repository/files
+GET /projects/:id/repository/files/:file_path
+```
+
+```bash
+curl --request GET --header 'PRIVATE-TOKEN: 9koXpg98eAheJpvBs5tK' 'https://gitlab.example.com/api/v4/projects/13083/repository/files/app%2Fmodels%2Fkey%2Erb?ref=master'
 ```
 
 Example response:
@@ -21,6 +27,7 @@ Example response:
   "size": 1476,
   "encoding": "base64",
   "content": "IyA9PSBTY2hlbWEgSW5mb3...",
+  "content_sha256": "4c294617b60715c1d218e61164a3abd4808a4284cbc30e6728a01ad9aada4481",
   "ref": "master",
   "blob_id": "79f7bbd25901e8334750839545a9bd021f0e4c83",
   "commit_id": "d5a3ff139356ce33e37e73add446f16869741b50",
@@ -30,54 +37,117 @@ Example response:
 
 Parameters:
 
-- `file_path` (required) - Full path to new file. Ex. lib/class.rb
+- `file_path` (required) - Url encoded full path to new file. Ex. lib%2Fclass%2Erb
 - `ref` (required) - The name of branch, tag or commit
+
+NOTE: **Note:**
+`blob_id` is the blob sha, see [repositories - Get a blob from repository](repositories.md#get-a-blob-from-repository)
+
+In addition to the `GET` method, you can also use `HEAD` to get just file metadata.
+
+```
+HEAD /projects/:id/repository/files/:file_path
+```
+
+```bash
+curl --head --header 'PRIVATE-TOKEN: 9koXpg98eAheJpvBs5tK' 'https://gitlab.example.com/api/v4/projects/13083/repository/files/app%2Fmodels%2Fkey%2Erb?ref=master'
+```
+
+Example response:
+
+```text
+HTTP/1.1 200 OK
+...
+X-Gitlab-Blob-Id: 79f7bbd25901e8334750839545a9bd021f0e4c83
+X-Gitlab-Commit-Id: d5a3ff139356ce33e37e73add446f16869741b50
+X-Gitlab-Content-Sha256: 4c294617b60715c1d218e61164a3abd4808a4284cbc30e6728a01ad9aada4481
+X-Gitlab-Encoding: base64
+X-Gitlab-File-Name: key.rb
+X-Gitlab-File-Path: app/models/key.rb
+X-Gitlab-Last-Commit-Id: 570e7b2abdd848b95f2f578043fc23bd6f6fd24d
+X-Gitlab-Ref: master
+X-Gitlab-Size: 1476
+...
+```
+
+## Get raw file from repository
+
+```
+GET /projects/:id/repository/files/:file_path/raw
+```
+
+```bash
+curl --request GET --header 'PRIVATE-TOKEN: 9koXpg98eAheJpvBs5tK' 'https://gitlab.example.com/api/v4/projects/13083/repository/files/app%2Fmodels%2Fkey%2Erb/raw?ref=master'
+```
+
+Parameters:
+
+- `file_path` (required) - Url encoded full path to new file. Ex. lib%2Fclass%2Erb
+- `ref` (required) - The name of branch, tag or commit
+
+NOTE: **Note:**
+Like [Get file from repository](repository_files.md#get-file-from-repository) you can use `HEAD` to get just file metadata.
 
 ## Create new file in repository
 
 ```
-POST /projects/:id/repository/files
+POST /projects/:id/repository/files/:file_path
+```
+
+```bash
+curl --request POST --header 'PRIVATE-TOKEN: 9koXpg98eAheJpvBs5tK' 'https://gitlab.example.com/api/v4/projects/13083/repository/files/app%2Fprojectrb%2E?branch=master&author_email=author%40example.com&author_name=Firstname%20Lastname&content=some%20content&commit_message=create%20a%20new%20file'
 ```
 
 Example response:
 
 ```json
 {
-  "file_name": "app/project.rb",
-  "branch_name": "master"
+  "file_path": "app/project.rb",
+  "branch": "master"
 }
 ```
 
 Parameters:
 
-- `file_path` (required) - Full path to new file. Ex. lib/class.rb
-- `branch_name` (required) - The name of branch
-- `encoding` (optional) - 'text' or 'base64'. Text is default.
+- `file_path` (required) - Url encoded full path to new file. Ex. lib%2Fclass%2Erb
+- `branch` (required) - Name of the branch
+- `start_branch` (optional) - Name of the branch to start the new commit from
+- `encoding` (optional) - Change encoding to 'base64'. Default is text.
+- `author_email` (optional) - Specify the commit author's email address
+- `author_name` (optional) - Specify the commit author's name
 - `content` (required) - File content
 - `commit_message` (required) - Commit message
 
 ## Update existing file in repository
 
 ```
-PUT /projects/:id/repository/files
+PUT /projects/:id/repository/files/:file_path
+```
+
+```bash
+curl --request PUT --header 'PRIVATE-TOKEN: 9koXpg98eAheJpvBs5tK' 'https://gitlab.example.com/api/v4/projects/13083/repository/files/app%2Fproject%2Erb?branch=master&author_email=author%40example.com&author_name=Firstname%20Lastname&content=some%20other%20content&commit_message=update%20file'
 ```
 
 Example response:
 
 ```json
 {
-  "file_name": "app/project.rb",
-  "branch_name": "master"
+  "file_path": "app/project.rb",
+  "branch": "master"
 }
 ```
 
 Parameters:
 
-- `file_path` (required) - Full path to file. Ex. lib/class.rb
-- `branch_name` (required) - The name of branch
-- `encoding` (optional) - 'text' or 'base64'. Text is default.
+- `file_path` (required) - Url encoded full path to new file. Ex. lib%2Fclass%2Erb
+- `branch` (required) - Name of the branch
+- `start_branch` (optional) - Name of the branch to start the new commit from
+- `encoding` (optional) - Change encoding to 'base64'. Default is text.
+- `author_email` (optional) - Specify the commit author's email address
+- `author_name` (optional) - Specify the commit author's name
 - `content` (required) - New file content
 - `commit_message` (required) - Commit message
+- `last_commit_id` (optional) - Last known file commit id
 
 If the commit fails for any reason we return a 400 error with a non-specific
 error message. Possible causes for a failed commit include:
@@ -91,20 +161,19 @@ Currently gitlab-shell has a boolean return code, preventing GitLab from specify
 ## Delete existing file in repository
 
 ```
-DELETE /projects/:id/repository/files
+DELETE /projects/:id/repository/files/:file_path
 ```
 
-Example response:
-
-```json
-{
-  "file_name": "app/project.rb",
-  "branch_name": "master"
-}
+```bash
+curl --request DELETE --header 'PRIVATE-TOKEN: 9koXpg98eAheJpvBs5tK' 'https://gitlab.example.com/api/v4/projects/13083/repository/files/app%2Fproject%2Erb?branch=master&author_email=author%40example.com&author_name=Firstname%20Lastname&commit_message=delete%20file'
 ```
 
 Parameters:
 
-- `file_path` (required) - Full path to file. Ex. lib/class.rb
-- `branch_name` (required) - The name of branch
+- `file_path` (required) - Url encoded full path to new file. Ex. lib%2Fclass%2Erb
+- `branch` (required) - Name of the branch
+- `start_branch` (optional) - Name of the branch to start the new commit from
+- `author_email` (optional) - Specify the commit author's email address
+- `author_name` (optional) - Specify the commit author's name
 - `commit_message` (required) - Commit message
+- `last_commit_id` (optional) - Last known file commit id

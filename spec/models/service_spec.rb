@@ -1,81 +1,96 @@
-# == Schema Information
-#
-# Table name: services
-#
-#  id                    :integer          not null, primary key
-#  type                  :string(255)
-#  title                 :string(255)
-#  project_id            :integer
-#  created_at            :datetime
-#  updated_at            :datetime
-#  active                :boolean          default(FALSE), not null
-#  properties            :text
-#  template              :boolean          default(FALSE)
-#  push_events           :boolean          default(TRUE)
-#  issues_events         :boolean          default(TRUE)
-#  merge_requests_events :boolean          default(TRUE)
-#  tag_push_events       :boolean          default(TRUE)
-#  note_events           :boolean          default(TRUE), not null
-#  build_events          :boolean          default(FALSE), not null
-#
-
 require 'spec_helper'
 
-describe Service, models: true do
-
+describe Service do
   describe "Associations" do
     it { is_expected.to belong_to :project }
     it { is_expected.to have_one :service_hook }
   end
 
-  describe "Mass assignment" do
+  describe 'Validations' do
+    it { is_expected.to validate_presence_of(:type) }
+  end
+
+  describe 'Scopes' do
+    describe '.confidential_note_hooks' do
+      it 'includes services where confidential_note_events is true' do
+        create(:service, active: true, confidential_note_events: true)
+
+        expect(described_class.confidential_note_hooks.count).to eq 1
+      end
+
+      it 'excludes services where confidential_note_events is false' do
+        create(:service, active: true, confidential_note_events: false)
+
+        expect(described_class.confidential_note_hooks.count).to eq 0
+      end
+    end
   end
 
   describe "Test Button" do
-    before do
-      @service = Service.new
-    end
+    describe '#can_test?' do
+      let(:service) { create(:service, project: project) }
 
-    describe "Testable" do
-      let(:project) { create :project }
+      context 'when repository is not empty' do
+        let(:project) { create(:project, :repository) }
 
-      before do
-        allow(@service).to receive(:project).and_return(project)
-        @testable = @service.can_test?
+        it 'returns true' do
+          expect(service.can_test?).to be true
+        end
       end
 
-      describe :can_test do
-        it { expect(@testable).to eq(true) }
-      end
+      context 'when repository is empty' do
+        let(:project) { create(:project) }
 
-      describe :test do
-        let(:data) { 'test' }
-
-        it 'test runs execute' do
-          expect(@service).to receive(:execute).with(data)
-
-          @service.test(data)
+        it 'returns true' do
+          expect(service.can_test?).to be true
         end
       end
     end
 
-    describe "With commits" do
-      let(:project) { create :project }
+    describe '#test' do
+      let(:data) { 'test' }
+      let(:service) { create(:service, project: project) }
 
-      before do
-        allow(@service).to receive(:project).and_return(project)
-        @testable = @service.can_test?
+      context 'when repository is not empty' do
+        let(:project) { create(:project, :repository) }
+
+        it 'test runs execute' do
+          expect(service).to receive(:execute).with(data)
+
+          service.test(data)
+        end
       end
 
-      describe :can_test do
-        it { expect(@testable).to eq(true) }
+      context 'when repository is empty' do
+        let(:project) { create(:project) }
+
+        it 'test runs execute' do
+          expect(service).to receive(:execute).with(data)
+
+          service.test(data)
+        end
       end
     end
   end
 
   describe "Template" do
+    describe '.build_from_template' do
+      context 'when template is invalid' do
+        it 'sets service template to inactive when template is invalid' do
+          project = create(:project)
+          template = KubernetesService.new(template: true, active: true)
+          template.save(validate: false)
+
+          service = described_class.build_from_template(project.id, template)
+
+          expect(service).to be_valid
+          expect(service.active).to be false
+        end
+      end
+    end
+
     describe "for pushover service" do
-      let(:service_template) do
+      let!(:service_template) do
         PushoverService.create(
           template: true,
           properties: {
@@ -87,14 +102,10 @@ describe Service, models: true do
       end
       let(:project) { create(:project) }
 
-      describe 'should be prefilled for projects pushover service' do
-        before do
-          service_template
-          project.build_missing_services
-        end
+      describe 'is prefilled for projects pushover service' do
+        it "has all fields prefilled" do
+          service = project.find_or_initialize_service('pushover')
 
-        it "should have all fields prefilled" do
-          service = project.pushover_service
           expect(service.template).to eq(false)
           expect(service.device).to eq('MyDevice')
           expect(service.sound).to eq('mic')
@@ -197,7 +208,6 @@ describe Service, models: true do
       )
     end
 
-
     it "returns nil when the property has not been assigned a new value" do
       service.username = "key_changed"
       expect(service.bamboo_url_was).to be_nil
@@ -223,6 +233,116 @@ describe Service, models: true do
       service.bamboo_url = 'http://example.com'
       service.save
       expect(service.bamboo_url_was).to be_nil
+    end
+  end
+
+  describe 'initialize service with no properties' do
+    let(:service) do
+      GitlabIssueTrackerService.create(
+        project: create(:project),
+        title: 'random title'
+      )
+    end
+
+    it 'does not raise error' do
+      expect { service }.not_to raise_error
+    end
+
+    it 'creates the properties' do
+      expect(service.properties).to eq({ "title" => "random title" })
+    end
+  end
+
+  describe "callbacks" do
+    let(:project) { create(:project) }
+    let!(:service) do
+      RedmineService.new(
+        project: project,
+        active: true,
+        properties: {
+          project_url: 'http://redmine/projects/project_name_in_redmine',
+          issues_url: "http://redmine/#{project.id}/project_name_in_redmine/:id",
+          new_issue_url: 'http://redmine/projects/project_name_in_redmine/issues/new'
+        }
+      )
+    end
+
+    describe "on create" do
+      it "updates the has_external_issue_tracker boolean" do
+        expect do
+          service.save!
+        end.to change { service.project.has_external_issue_tracker }.from(false).to(true)
+      end
+    end
+
+    describe "on update" do
+      it "updates the has_external_issue_tracker boolean" do
+        service.save!
+
+        expect do
+          service.update(active: false)
+        end.to change { service.project.has_external_issue_tracker }.from(true).to(false)
+      end
+    end
+  end
+
+  describe "#deprecated?" do
+    let(:project) { create(:project, :repository) }
+
+    it 'should return false by default' do
+      service = create(:service, project: project)
+      expect(service.deprecated?).to be_falsy
+    end
+  end
+
+  describe "#deprecation_message" do
+    let(:project) { create(:project, :repository) }
+
+    it 'should be empty by default' do
+      service = create(:service, project: project)
+      expect(service.deprecation_message).to be_nil
+    end
+  end
+
+  describe '.find_by_template' do
+    let!(:kubernetes_service) { create(:kubernetes_service, template: true) }
+
+    it 'returns service template' do
+      expect(KubernetesService.find_by_template).to eq(kubernetes_service)
+    end
+  end
+
+  describe '#api_field_names' do
+    let(:fake_service) do
+      Class.new(Service) do
+        def fields
+          [
+            { name: 'token' },
+            { name: 'api_token' },
+            { name: 'key' },
+            { name: 'api_key' },
+            { name: 'password' },
+            { name: 'password_field' },
+            { name: 'safe_field' }
+          ]
+        end
+      end
+    end
+
+    let(:service) do
+      fake_service.new(properties: [
+        { token: 'token-value' },
+        { api_token: 'api_token-value' },
+        { key: 'key-value' },
+        { api_key: 'api_key-value' },
+        { password: 'password-value' },
+        { password_field: 'password_field-value' },
+        { safe_field: 'safe_field-value' }
+      ])
+    end
+
+    it 'filters out sensitive fields' do
+      expect(service.api_field_names).to eq(['safe_field'])
     end
   end
 end

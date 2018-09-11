@@ -1,37 +1,28 @@
-require_relative "base_service"
+# frozen_string_literal: true
 
 module Files
   class CreateService < Files::BaseService
-    def commit
-      repository.commit_file(current_user, @file_path, @file_content, @commit_message, @target_branch, false)
+    def create_commit!
+      transformer = Lfs::FileTransformer.new(project, @branch_name)
+
+      result = transformer.new_file(@file_path, @file_content)
+
+      create_transformed_commit(result.content)
     end
 
-    def validate
-      super
+    private
 
-      if @file_path =~ Gitlab::Regex.directory_traversal_regex
-        raise_error(
-          'Your changes could not be committed, because the file name ' +
-          Gitlab::Regex.directory_traversal_regex_message
-        )
-      end
-
-      unless @file_path =~ Gitlab::Regex.file_path_regex
-        raise_error(
-          'Your changes could not be committed, because the file name ' +
-          Gitlab::Regex.file_path_regex_message
-        )
-      end
-
-      unless project.empty_repo?
-        @file_path.slice!(0) if @file_path.start_with?('/')
-
-        blob = repository.blob_at_branch(@source_branch, @file_path)
-
-        if blob
-          raise_error("Your changes could not be committed because a file with the same name already exists")
-        end
-      end
+    def create_transformed_commit(content_or_lfs_pointer)
+      repository.create_file(
+        current_user,
+        @file_path,
+        content_or_lfs_pointer,
+        message: @commit_message,
+        branch_name: @branch_name,
+        author_email: @author_email,
+        author_name: @author_name,
+        start_project: @start_project,
+        start_branch_name: @start_branch)
     end
   end
 end

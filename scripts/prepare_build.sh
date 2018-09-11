@@ -1,44 +1,56 @@
-#!/bin/bash
+. scripts/utils.sh
 
-retry() {
-    for i in $(seq 1 3); do
-        if eval "$@"; then
-            return 0
-        fi
-        sleep 3s
-        echo "Retrying..."
-    done
-    return 1
-}
+export SETUP_DB=${SETUP_DB:-true}
+export CREATE_DB_USER=${CREATE_DB_USER:-$SETUP_DB}
+export USE_BUNDLE_INSTALL=${USE_BUNDLE_INSTALL:-true}
+export BUNDLE_INSTALL_FLAGS="--without=production --jobs=$(nproc) --path=vendor --retry=3 --quiet"
 
-if [ -f /.dockerenv ] || [ -f ./dockerinit ]; then
-    mkdir -p vendor
+if [ "$USE_BUNDLE_INSTALL" != "false" ]; then
+    bundle install --clean $BUNDLE_INSTALL_FLAGS && bundle check
+fi
 
-    # Install phantomjs package
-    pushd vendor
-    if [ ! -e phantomjs_1.9.8-0jessie_amd64.deb ]; then
-        wget -q https://gitlab.com/axil/phantomjs-debian/raw/master/phantomjs_1.9.8-0jessie_amd64.deb
-    fi
-    dpkg -i phantomjs_1.9.8-0jessie_amd64.deb
-    popd
+# Only install knapsack after bundle install! Otherwise oddly some native
+# gems could not be found under some circumstance. No idea why, hours wasted.
+retry gem install knapsack --no-ri --no-rdoc
 
-    # Try to install packages
-    retry 'apt-get update -yqqq; apt-get -o dir::cache::archives="vendor/apt" install -y -qq --force-yes \
-      libicu-dev libkrb5-dev cmake nodejs postgresql-client mysql-client unzip'
+cp config/gitlab.yml.example config/gitlab.yml
+sed -i 's/bin_path: \/usr\/bin\/git/bin_path: \/usr\/local\/bin\/git/' config/gitlab.yml
 
-    cp config/database.yml.mysql config/database.yml
-    sed -i 's/username:.*/username: root/g' config/database.yml
-    sed -i 's/password:.*/password:/g' config/database.yml
-    sed -i 's/# socket:.*/host: mysql/g' config/database.yml
+# Determine the database by looking at the job name.
+# For example, we'll get pg if the job is `rspec-pg 19 20`
+export GITLAB_DATABASE=$(echo $CI_JOB_NAME | cut -f1 -d' ' | cut -f2 -d-)
 
-    cp config/resque.yml.example config/resque.yml
-    sed -i 's/localhost/redis/g' config/resque.yml
+# This would make the default database postgresql, and we could also use
+# pg to mean postgresql.
+if [ "$GITLAB_DATABASE" != 'mysql' ]; then
+    export GITLAB_DATABASE='postgresql'
+fi
 
-    export FLAGS=(--path vendor --retry 3)
-else
-    export PATH=$HOME/bin:/usr/local/bin:/usr/bin:/bin
-    cp config/database.yml.mysql config/database.yml
-    sed "s/username\:.*$/username\: runner/" -i config/database.yml
-    sed "s/password\:.*$/password\: 'password'/" -i config/database.yml
-    sed "s/gitlabhq_test/gitlabhq_test_$((RANDOM/5000))/" -i config/database.yml
+cp config/database.yml.$GITLAB_DATABASE config/database.yml
+
+# Set user to a non-superuser to ensure we test permissions
+sed -i 's/username: root/username: gitlab/g' config/database.yml
+
+if [ "$GITLAB_DATABASE" = 'postgresql' ]; then
+    sed -i 's/localhost/postgres/g' config/database.yml
+else # Assume it's mysql
+    sed -i 's/localhost/mysql/g' config/database.yml
+fi
+
+cp config/resque.yml.example config/resque.yml
+sed -i 's/localhost/redis/g' config/resque.yml
+
+cp config/redis.cache.yml.example config/redis.cache.yml
+sed -i 's/localhost/redis/g' config/redis.cache.yml
+
+cp config/redis.queues.yml.example config/redis.queues.yml
+sed -i 's/localhost/redis/g' config/redis.queues.yml
+
+cp config/redis.shared_state.yml.example config/redis.shared_state.yml
+sed -i 's/localhost/redis/g' config/redis.shared_state.yml
+
+if [ "$SETUP_DB" != "false" ]; then
+    setup_db
+elif getent hosts postgres || getent hosts mysql; then
+    setup_db_user_only
 fi

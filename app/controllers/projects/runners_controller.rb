@@ -1,26 +1,21 @@
 class Projects::RunnersController < Projects::ApplicationController
   before_action :authorize_admin_build!
-  before_action :set_runner, only: [:edit, :update, :destroy, :pause, :resume, :show]
+  before_action :runner, only: [:edit, :update, :destroy, :pause, :resume, :show]
 
   layout 'project_settings'
 
   def index
-    @runners = project.runners.ordered
-    @specific_runners = current_user.ci_authorized_runners.
-      where.not(id: project.runners).
-      ordered.page(params[:page]).per(20)
-    @shared_runners = Ci::Runner.shared.active
-    @shared_runners_count = @shared_runners.count(:all)
+    redirect_to project_settings_ci_cd_path(@project, anchor: 'js-runners-settings')
   end
 
   def edit
   end
 
   def update
-    if @runner.update_attributes(runner_params)
-      redirect_to runner_path(@runner), notice: 'Runner was successfully updated.'
+    if Ci::UpdateRunnerService.new(@runner).update(runner_params)
+      redirect_to project_runner_path(@project, @runner), notice: 'Runner was successfully updated.'
     else
-      redirect_to runner_path(@runner), alert: 'Runner was not updated.'
+      render 'edit'
     end
   end
 
@@ -29,41 +24,48 @@ class Projects::RunnersController < Projects::ApplicationController
       @runner.destroy
     end
 
-    redirect_to runners_path(@project)
+    redirect_to project_runners_path(@project), status: :found
   end
 
   def resume
-    if @runner.update_attributes(active: true)
-      redirect_to runner_path(@runner), notice: 'Runner was successfully updated.'
+    if Ci::UpdateRunnerService.new(@runner).update(active: true)
+      redirect_to project_runners_path(@project), notice: 'Runner was successfully updated.'
     else
-      redirect_to runner_path(@runner), alert: 'Runner was not updated.'
+      redirect_to project_runners_path(@project), alert: 'Runner was not updated.'
     end
   end
 
   def pause
-    if @runner.update_attributes(active: false)
-      redirect_to runner_path(@runner), notice: 'Runner was successfully updated.'
+    if Ci::UpdateRunnerService.new(@runner).update(active: false)
+      redirect_to project_runners_path(@project), notice: 'Runner was successfully updated.'
     else
-      redirect_to runner_path(@runner), alert: 'Runner was not updated.'
+      redirect_to project_runners_path(@project), alert: 'Runner was not updated.'
     end
   end
 
   def show
+    render 'shared/runners/show'
   end
 
   def toggle_shared_runners
     project.toggle!(:shared_runners_enabled)
 
-    redirect_to namespace_project_runners_path(project.namespace, project)
+    redirect_to project_settings_ci_cd_path(@project, anchor: 'js-runners-settings')
+  end
+
+  def toggle_group_runners
+    project.toggle_ci_cd_settings!(:group_runners_enabled)
+
+    redirect_to project_settings_ci_cd_path(@project, anchor: 'js-runners-settings')
   end
 
   protected
 
-  def set_runner
+  def runner
     @runner ||= project.runners.find(params[:id])
   end
 
   def runner_params
-    params.require(:runner).permit(:description, :tag_list, :active)
+    params.require(:runner).permit(Ci::Runner::FORM_EDITABLE)
   end
 end

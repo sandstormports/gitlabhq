@@ -1,6 +1,6 @@
 require 'spec_helper'
 
-describe Milestone, "StripAttribute" do
+describe StripAttribute do
   let(:milestone) { create(:milestone) }
 
   describe ".strip_attributes" do
@@ -16,5 +16,4 @@ describe Milestone, "StripAttribute" do
 
     it { expect(milestone.title).to eq('8.3') }
   end
-
 end

@@ -1,32 +1,13 @@
-# == Schema Information
-#
-# Table name: todos
-#
-#  id          :integer          not null, primary key
-#  user_id     :integer          not null
-#  project_id  :integer          not null
-#  target_id   :integer
-#  target_type :string           not null
-#  author_id   :integer
-#  action      :integer          not null
-#  state       :string           not null
-#  created_at  :datetime
-#  updated_at  :datetime
-#  note_id     :integer
-#  commit_id   :string
-#
-
 require 'spec_helper'
 
-describe Todo, models: true do
-  let(:project) { create(:project) }
-  let(:commit) { project.commit }
+describe Todo do
   let(:issue) { create(:issue) }
 
   describe 'relationships' do
     it { is_expected.to belong_to(:author).class_name("User") }
     it { is_expected.to belong_to(:note) }
     it { is_expected.to belong_to(:project) }
+    it { is_expected.to belong_to(:group) }
     it { is_expected.to belong_to(:target).touch(true) }
     it { is_expected.to belong_to(:user) }
   end
@@ -40,6 +21,7 @@ describe Todo, models: true do
     it { is_expected.to validate_presence_of(:action) }
     it { is_expected.to validate_presence_of(:target_type) }
     it { is_expected.to validate_presence_of(:user) }
+    it { is_expected.to validate_presence_of(:author) }
 
     context 'for commits' do
       subject { described_class.new(target_type: 'Commit') }
@@ -100,6 +82,9 @@ describe Todo, models: true do
 
   describe '#target' do
     context 'for commits' do
+      let(:project) { create(:project, :repository) }
+      let(:commit) { project.commit }
+
       it 'returns an instance of Commit when exists' do
         subject.project = project
         subject.target_type = 'Commit'
@@ -126,17 +111,66 @@ describe Todo, models: true do
   end
 
   describe '#target_reference' do
-    it 'returns the short commit id for commits' do
+    it 'returns commit full reference with short id' do
+      project = create(:project, :repository)
+      commit = project.commit
+
       subject.project = project
       subject.target_type = 'Commit'
       subject.commit_id = commit.id
 
-      expect(subject.target_reference).to eq commit.short_id
+      expect(subject.target_reference).to eq commit.reference_link_text(full: true)
     end
 
-    it 'returns reference for issuables' do
+    it 'returns full reference for issuables' do
       subject.target = issue
-      expect(subject.target_reference).to eq issue.to_reference
+      expect(subject.target_reference).to eq issue.to_reference(full: true)
+    end
+  end
+
+  describe '#self_added?' do
+    let(:user_1) { build(:user) }
+
+    before do
+      subject.user = user_1
+    end
+
+    it 'is true when the user is the author' do
+      subject.author = user_1
+
+      expect(subject).to be_self_added
+    end
+
+    it 'is false when the user is not the author' do
+      subject.author = build(:user)
+
+      expect(subject).not_to be_self_added
+    end
+  end
+
+  describe '#self_assigned?' do
+    let(:user_1) { build(:user) }
+
+    before do
+      subject.user = user_1
+      subject.author = user_1
+      subject.action = Todo::ASSIGNED
+    end
+
+    it 'is true when todo is ASSIGNED and self_added' do
+      expect(subject).to be_self_assigned
+    end
+
+    it 'is false when the todo is not ASSIGNED' do
+      subject.action = Todo::MENTIONED
+
+      expect(subject).not_to be_self_assigned
+    end
+
+    it 'is false when todo is not self_added' do
+      subject.author = build(:user)
+
+      expect(subject).not_to be_self_assigned
     end
   end
 end

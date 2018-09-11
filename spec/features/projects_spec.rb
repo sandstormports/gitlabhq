@@ -1,12 +1,54 @@
 require 'spec_helper'
 
-feature 'Project', feature: true do
-  describe 'description' do
-    let(:project) { create(:project) }
-    let(:path)    { namespace_project_path(project.namespace, project) }
+describe 'Project' do
+  include ProjectForksHelper
+
+  describe 'creating from template' do
+    let(:user)    { create(:user) }
+    let(:template) { Gitlab::ProjectTemplate.find(:rails) }
 
     before do
-      login_as(:admin)
+      sign_in user
+      visit new_project_path
+    end
+
+    it "allows creation from templates", :js do
+      find('#create-from-template-tab').click
+      find("label[for=#{template.name}]").click
+      fill_in("project_path", with: template.name)
+
+      page.within '#content-body' do
+        click_button "Create project"
+      end
+
+      expect(page).to have_content template.name
+    end
+  end
+
+  describe 'shows tip about push to create git command' do
+    let(:user)    { create(:user) }
+
+    before do
+      sign_in user
+      visit new_project_path
+    end
+
+    it 'shows the command in a popover', :js do
+      page.within '.profile-settings-sidebar' do
+        click_link 'Show command'
+      end
+
+      expect(page).to have_css('.popover .push-to-create-popover #push_to_create_tip')
+      expect(page).to have_content 'Private projects can be created in your personal namespace with:'
+    end
+  end
+
+  describe 'description' do
+    let(:project) { create(:project, :repository) }
+    let(:path)    { project_path(project) }
+
+    before do
+      sign_in(create(:admin))
     end
 
     it 'parses Markdown' do
@@ -18,7 +60,7 @@ feature 'Project', feature: true do
     it 'passes through html-pipeline' do
       project.update_attribute(:description, 'This project is the :poop:')
       visit path
-      expect(page).to have_css('.project-home-desc > p > img')
+      expect(page).to have_css('.project-home-desc > p > gl-emoji')
     end
 
     it 'sanitizes unwanted tags' do
@@ -34,73 +76,184 @@ feature 'Project', feature: true do
     end
   end
 
-  describe 'remove forked relationship', js: true do
+  describe 'remove forked relationship', :js do
     let(:user)    { create(:user) }
-    let(:project) { create(:project, namespace: user.namespace) }
+    let(:project) { fork_project(create(:project, :public), user, namespace_id: user.namespace) }
 
     before do
-      login_with user
-      create(:forked_project_link, forked_to_project: project)
-      visit edit_namespace_project_path(project.namespace, project)
+      sign_in user
+      visit edit_project_path(project)
     end
 
-    it 'should remove fork' do
+    it 'removes fork' do
       expect(page).to have_content 'Remove fork relationship'
 
       remove_with_confirm('Remove fork relationship', project.path)
 
       expect(page).to have_content 'The fork relationship has been removed.'
-      expect(project.forked?).to be_falsey
+      expect(project.reload.forked?).to be_falsey
       expect(page).not_to have_content 'Remove fork relationship'
     end
   end
 
-  describe 'removal', js: true do
-    let(:user)    { create(:user) }
-    let(:project) { create(:project, namespace: user.namespace) }
+  describe 'showing information about source of a project fork' do
+    let(:user) { create(:user) }
+    let(:base_project)  { create(:project, :public, :repository) }
+    let(:forked_project) { fork_project(base_project, user, repository: true) }
 
     before do
-      login_with(user)
-      project.team << [user, :master]
-      visit edit_namespace_project_path(project.namespace, project)
+      sign_in user
     end
 
-    it 'should remove project' do
-      expect { remove_with_confirm('Remove project', project.path) }.to change {Project.count}.by(-1)
+    it 'shows a link to the source project when it is available' do
+      visit project_path(forked_project)
+
+      expect(page).to have_content('Forked from')
+      expect(page).to have_link(base_project.full_name)
+    end
+
+    it 'does not contain fork network information for the root project' do
+      forked_project
+
+      visit project_path(base_project)
+
+      expect(page).not_to have_content('In fork network of')
+      expect(page).not_to have_content('Forked from')
+    end
+
+    it 'shows the name of the deleted project when the source was deleted' do
+      forked_project
+      Projects::DestroyService.new(base_project, base_project.owner).execute
+
+      visit project_path(forked_project)
+
+      expect(page).to have_content("Forked from #{base_project.full_name} (deleted)")
+    end
+
+    context 'a fork of a fork' do
+      let(:fork_of_fork) { fork_project(forked_project, user, repository: true) }
+
+      it 'links to the base project if the source project is removed' do
+        fork_of_fork
+        Projects::DestroyService.new(forked_project, user).execute
+
+        visit project_path(fork_of_fork)
+
+        expect(page).to have_content("Forked from")
+        expect(page).to have_link(base_project.full_name)
+      end
     end
   end
 
-  describe 'leave project link' do
+  describe 'removal', :js do
     let(:user)    { create(:user) }
     let(:project) { create(:project, namespace: user.namespace) }
 
     before do
-      login_with(user)
-      project.team.add_user(user, Gitlab::Access::MASTER)
-      visit namespace_project_path(project.namespace, project)
+      sign_in(user)
+      project.add_maintainer(user)
+      visit edit_project_path(project)
     end
 
-    it 'click project-settings and find leave project' do
-      find('#project-settings-button').click
-      expect(page).to have_link('Leave Project')
+    it 'focuses on the confirmation field' do
+      click_button 'Remove project'
+
+      expect(page).to have_selector '#confirm_name_input:focus'
+    end
+
+    it 'removes a project' do
+      expect { remove_with_confirm('Remove project', project.path) }.to change { Project.count }.by(-1)
+      expect(page).to have_content "Project '#{project.full_name}' is in the process of being deleted."
+      expect(Project.all.count).to be_zero
+      expect(project.issues).to be_empty
+      expect(project.merge_requests).to be_empty
     end
   end
 
-  describe 'project title' do
-    include WaitForAjax
-
-    let(:user)    { create(:user) }
-    let(:project) { create(:project, namespace: user.namespace) }
+  describe 'tree view (default view is set to Files)' do
+    let(:user) { create(:user, project_view: 'files') }
+    let(:project) { create(:forked_project_with_submodules) }
 
     before do
-      login_with(user)
-      project.team.add_user(user, Gitlab::Access::MASTER)
-      visit namespace_project_path(project.namespace, project)
+      project.add_maintainer(user)
+      sign_in user
+      visit project_path(project)
     end
 
-    it 'click toggle and show dropdown', js: true do
-      find('.js-projects-dropdown-toggle').click
-      expect(page).to have_css('.dropdown-menu-projects .dropdown-content li', count: 1)
+    it 'has working links to files' do
+      click_link('PROCESS.md')
+
+      expect(page.status_code).to eq(200)
+    end
+
+    it 'has working links to directories' do
+      click_link('encoding')
+
+      expect(page.status_code).to eq(200)
+    end
+
+    it 'has working links to submodules' do
+      click_link('645f6c4c')
+
+      expect(page.status_code).to eq(200)
+    end
+
+    context 'for signed commit on default branch', :js do
+      before do
+        project.change_head('33f3729a45c02fc67d00adb1b8bca394b0e761d9')
+      end
+
+      it 'displays a GPG badge' do
+        visit project_path(project)
+        wait_for_requests
+
+        expect(page).not_to have_selector '.gpg-status-box.js-loading-gpg-badge'
+        expect(page).to have_selector '.gpg-status-box.invalid'
+      end
+    end
+
+    context 'for subgroups', :js do
+      let(:group) { create(:group) }
+      let(:subgroup) { create(:group, parent: group) }
+      let(:project) { create(:project, :repository, group: subgroup) }
+
+      it 'renders tree table without errors' do
+        wait_for_requests
+
+        expect(page).to have_selector('.tree-item')
+        expect(page).not_to have_selector('.flash-alert')
+      end
+
+      context 'for signed commit' do
+        before do
+          repository = project.repository
+          repository.write_ref("refs/heads/#{project.default_branch}", '33f3729a45c02fc67d00adb1b8bca394b0e761d9')
+          repository.expire_branches_cache
+        end
+
+        it 'displays a GPG badge' do
+          visit project_path(project)
+          wait_for_requests
+
+          expect(page).not_to have_selector '.gpg-status-box.js-loading-gpg-badge'
+          expect(page).to have_selector '.gpg-status-box.invalid'
+        end
+      end
+    end
+  end
+
+  describe 'activity view' do
+    let(:user) { create(:user, project_view: 'activity') }
+    let(:project) { create(:project, :repository) }
+
+    before do
+      project.add_maintainer(user)
+      sign_in user
+      visit project_path(project)
+    end
+
+    it 'loads activity', :js do
+      expect(page).to have_selector('.event-item')
     end
   end
 

@@ -14,6 +14,8 @@
   %td
     = spam_log.via_api? ? 'Y' : 'N'
   %td
+    = spam_log.recaptcha_verified ? 'Y' : 'N'
+  %td
     = spam_log.noteable_type
   %td
     = spam_log.title
@@ -22,11 +24,16 @@
   %td
     - if user
       = link_to 'Remove user', admin_spam_log_path(spam_log, remove_user: true),
-        data: { confirm: "USER #{user.name} WILL BE REMOVED! Are you sure?" }, method: :delete, class: "btn btn-xs btn-remove"
+        data: { confirm: "USER #{user.name} WILL BE REMOVED! Are you sure?" }, method: :delete, class: "btn btn-sm btn-remove"
   %td
-    - if user && !user.blocked?
-      = link_to 'Block user', block_admin_user_path(user), data: {confirm: 'USER WILL BE BLOCKED! Are you sure?'}, method: :put, class: "btn btn-xs"
+    - if spam_log.submitted_as_ham?
+      .btn.btn-sm.disabled
+        Submitted as ham
     - else
-      .btn.btn-xs.disabled
-        Already Blocked
-    = link_to 'Remove log', [:admin, spam_log], remote: true, method: :delete, class: "btn btn-xs btn-close js-remove-tr"
+      = link_to 'Submit as ham', mark_as_ham_admin_spam_log_path(spam_log), method: :post, class: 'btn btn-sm btn-warning'
+    - if user && !user.blocked?
+      = link_to 'Block user', block_admin_user_path(user), data: {confirm: 'USER WILL BE BLOCKED! Are you sure?'}, method: :put, class: "btn btn-sm"
+    - else
+      .btn.btn-sm.disabled
+        Already blocked
+    = link_to 'Remove log', [:admin, spam_log], remote: true, method: :delete, class: "btn btn-sm btn-close js-remove-tr"

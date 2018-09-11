@@ -1,6 +1,6 @@
 require 'spec_helper'
 
-describe Gitlab::Sherlock::Query, lib: true do
+describe Gitlab::Sherlock::Query do
   let(:started_at)  { Time.utc(2015, 1, 1) }
   let(:finished_at) { started_at + 5 }
 
@@ -13,8 +13,8 @@ describe Gitlab::Sherlock::Query, lib: true do
       sql = 'SELECT COUNT(*) FROM users WHERE id = $1'
       bindings = [[double(:column), 10]]
 
-      query = described_class.
-        new_with_bindings(sql, bindings, started_at, finished_at)
+      query = described_class
+        .new_with_bindings(sql, bindings, started_at, finished_at)
 
       expect(query.query).to eq('SELECT COUNT(*) FROM users WHERE id = 10;')
     end
@@ -85,7 +85,7 @@ FROM users;
       frames = query.application_backtrace
 
       expect(frames).to be_an_instance_of(Array)
-      expect(frames).to_not be_empty
+      expect(frames).not_to be_empty
 
       frames.each do |frame|
         expect(frame.path).to start_with(Rails.root.to_s)

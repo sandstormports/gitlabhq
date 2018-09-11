@@ -1,26 +1,6 @@
-# == Schema Information
-#
-# Table name: services
-#
-#  id                    :integer          not null, primary key
-#  type                  :string(255)
-#  title                 :string(255)
-#  project_id            :integer
-#  created_at            :datetime
-#  updated_at            :datetime
-#  active                :boolean          default(FALSE), not null
-#  properties            :text
-#  template              :boolean          default(FALSE)
-#  push_events           :boolean          default(TRUE)
-#  issues_events         :boolean          default(TRUE)
-#  merge_requests_events :boolean          default(TRUE)
-#  tag_push_events       :boolean          default(TRUE)
-#  note_events           :boolean          default(TRUE), not null
-#
-
 require 'spec_helper'
 
-describe RedmineService, models: true do
+describe RedmineService do
   describe 'Associations' do
     it { is_expected.to belong_to :project }
     it { is_expected.to have_one :service_hook }
@@ -28,7 +8,9 @@ describe RedmineService, models: true do
 
   describe 'Validations' do
     context 'when service is active' do
-      before { subject.active = true }
+      before do
+        subject.active = true
+      end
 
       it { is_expected.to validate_presence_of(:project_url) }
       it { is_expected.to validate_presence_of(:issues_url) }
@@ -39,11 +21,21 @@ describe RedmineService, models: true do
     end
 
     context 'when service is inactive' do
-      before { subject.active = false }
+      before do
+        subject.active = false
+      end
 
       it { is_expected.not_to validate_presence_of(:project_url) }
       it { is_expected.not_to validate_presence_of(:issues_url) }
       it { is_expected.not_to validate_presence_of(:new_issue_url) }
+    end
+  end
+
+  describe '.reference_pattern' do
+    it_behaves_like 'allows project key on reference pattern'
+
+    it 'does allow # on the reference' do
+      expect(described_class.reference_pattern.match('#123')[:issue]).to eq('123')
     end
   end
 end

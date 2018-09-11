@@ -15,10 +15,10 @@ This will allow us to test PHP projects against different versions of PHP.
 However, not everything is plug 'n' play, you still need to configure some
 things manually.
 
-As with every build, you need to create a valid `.gitlab-ci.yml` describing the
+As with every job, you need to create a valid `.gitlab-ci.yml` describing the
 build environment.
 
-Let's first specify the PHP image that will be used for the build process
+Let's first specify the PHP image that will be used for the job process
 (you can read more about what an image means in the Runner's lingo reading
 about [Using Docker images](../docker/using_docker_images.md#what-is-image)).
 
@@ -40,7 +40,7 @@ repository with the following content:
 #!/bin/bash
 
 # We need to install dependencies only for Docker
-[[ ! -e /.dockerinit ]] && exit 0
+[[ ! -e /.dockerenv ]] && exit 0
 
 set -xe
 
@@ -49,7 +49,7 @@ apt-get update -yqq
 apt-get install git -yqq
 
 # Install phpunit, the tool that we will use for testing
-curl -o /usr/local/bin/phpunit https://phar.phpunit.de/phpunit.phar
+curl --location --output /usr/local/bin/phpunit https://phar.phpunit.de/phpunit.phar
 chmod +x /usr/local/bin/phpunit
 
 # Install mysql driver
@@ -58,9 +58,9 @@ docker-php-ext-install pdo_mysql
 ```
 
 You might wonder what `docker-php-ext-install` is. In short, it is a script
-provided by the official php docker image that you can use to easilly install
-extensions. For more information read the the documentation at
-<https://hub.docker.com/_/php/>.
+provided by the official php docker image that you can use to easily install
+extensions. For more information read the documentation at
+<https://hub.docker.com/r/_/php/>.
 
 Now that we created the script that contains all prerequisites for our build
 environment, let's add it in `.gitlab-ci.yml`:
@@ -92,7 +92,7 @@ Finally, commit your files and push them to GitLab to see your build succeeding
 The final `.gitlab-ci.yml` should look similar to this:
 
 ```yaml
-# Select image from https://hub.docker.com/_/php/
+# Select image from https://hub.docker.com/r/_/php/
 image: php:5.6
 
 before_script:
@@ -142,7 +142,7 @@ Of course, `my_php.ini` must be present in the root directory of your repository
 
 ## Test PHP projects using the Shell executor
 
-The shell executor runs your builds in a terminal session on your server.
+The shell executor runs your job in a terminal session on your server.
 Thus, in order to test your projects you first need to make sure that all
 dependencies are installed.
 
@@ -167,7 +167,7 @@ Finally, push to GitLab and let the tests begin!
 ### Test against different PHP versions in Shell builds
 
 The [phpenv][] project allows you to easily manage different versions of PHP
-each with its own config. This is specially usefull when testing PHP projects
+each with its own config. This is especially useful when testing PHP projects
 with the Shell executor.
 
 You will have to install it on your build machine under the `gitlab-runner`
@@ -227,7 +227,7 @@ following in your `.gitlab-ci.yml`:
 ...
 
 # Composer stores all downloaded packages in the vendor/ directory.
-# Do not use the following if the vendor/ directory is commited to
+# Do not use the following if the vendor/ directory is committed to
 # your git repository.
 cache:
   paths:
@@ -235,7 +235,11 @@ cache:
 
 before_script:
 # Install composer dependencies
-- curl -sS https://getcomposer.org/installer | php
+- wget https://composer.github.io/installer.sig -O - -q | tr -d '\n' > installer.sig
+- php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+- php -r "if (hash_file('SHA384', 'composer-setup.php') === file_get_contents('installer.sig')) { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
+- php composer-setup.php
+- php -r "unlink('composer-setup.php'); unlink('installer.sig');"
 - php composer.phar install
 
 ...
@@ -276,9 +280,9 @@ that runs on [GitLab.com](https://gitlab.com) using our publicly available
 [shared runners](../runners/README.md).
 
 Want to hack on it? Simply fork it, commit and push  your changes. Within a few
-moments the changes will be picked by a public runner and the build will begin.
+moments the changes will be picked by a public runner and the job will begin.
 
-[php-hub]: https://hub.docker.com/_/php/
+[php-hub]: https://hub.docker.com/r/_/php/
 [phpenv]: https://github.com/phpenv/phpenv
 [phpenv-installation]: https://github.com/phpenv/phpenv#installation
 [php-example-repo]: https://gitlab.com/gitlab-examples/php

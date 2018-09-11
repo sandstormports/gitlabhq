@@ -1,51 +1,53 @@
 module API
-  # Projects variables API
   class Variables < Grape::API
+    include PaginationParams
+
     before { authenticate! }
     before { authorize! :admin_build, user_project }
 
-    resource :projects do
-      # Get project variables
-      #
-      # Parameters:
-      #   id (required) - The ID of a project
-      #   page (optional) - The page number for pagination
-      #   per_page (optional) - The value of items per page to show
-      # Example Request:
-      #   GET /projects/:id/variables
+    params do
+      requires :id, type: String, desc: 'The ID of a project'
+    end
+
+    resource :projects, requirements: API::PROJECT_ENDPOINT_REQUIREMENTS  do
+      desc 'Get project variables' do
+        success Entities::Variable
+      end
+      params do
+        use :pagination
+      end
       get ':id/variables' do
         variables = user_project.variables
         present paginate(variables), with: Entities::Variable
       end
 
-      # Get specific variable of a project
-      #
-      # Parameters:
-      #   id (required) - The ID of a project
-      #   key (required) - The `key` of variable
-      # Example Request:
-      #   GET /projects/:id/variables/:key
+      desc 'Get a specific variable from a project' do
+        success Entities::Variable
+      end
+      params do
+        requires :key, type: String, desc: 'The key of the variable'
+      end
       get ':id/variables/:key' do
         key = params[:key]
-        variable = user_project.variables.find_by(key: key.to_s)
+        variable = user_project.variables.find_by(key: key)
 
-        return not_found!('Variable') unless variable
+        break not_found!('Variable') unless variable
 
         present variable, with: Entities::Variable
       end
 
-      # Create a new variable in project
-      #
-      # Parameters:
-      #   id (required) - The ID of a project
-      #   key (required) - The key of variable
-      #   value (required) - The value of variable
-      # Example Request:
-      #   POST /projects/:id/variables
+      desc 'Create a new variable in a project' do
+        success Entities::Variable
+      end
+      params do
+        requires :key, type: String, desc: 'The key of the variable'
+        requires :value, type: String, desc: 'The value of the variable'
+        optional :protected, type: String, desc: 'Whether the variable is protected'
+      end
       post ':id/variables' do
-        required_attributes! [:key, :value]
+        variable_params = declared_params(include_missing: false)
 
-        variable = user_project.variables.create(key: params[:key], value: params[:value])
+        variable = user_project.variables.create(variable_params)
 
         if variable.valid?
           present variable, with: Entities::Variable
@@ -54,41 +56,41 @@ module API
         end
       end
 
-      # Update existing variable of a project
-      #
-      # Parameters:
-      #   id (required) - The ID of a project
-      #   key (optional) - The `key` of variable
-      #   value (optional) - New value for `value` field of variable
-      # Example Request:
-      #   PUT /projects/:id/variables/:key
+      desc 'Update an existing variable from a project' do
+        success Entities::Variable
+      end
+      params do
+        optional :key, type: String, desc: 'The key of the variable'
+        optional :value, type: String, desc: 'The value of the variable'
+        optional :protected, type: String, desc: 'Whether the variable is protected'
+      end
       put ':id/variables/:key' do
-        variable = user_project.variables.find_by(key: params[:key].to_s)
+        variable = user_project.variables.find_by(key: params[:key])
 
-        return not_found!('Variable') unless variable
+        break not_found!('Variable') unless variable
 
-        attrs = attributes_for_keys [:value]
-        if variable.update(attrs)
+        variable_params = declared_params(include_missing: false).except(:key)
+
+        if variable.update(variable_params)
           present variable, with: Entities::Variable
         else
           render_validation_error!(variable)
         end
       end
 
-      # Delete existing variable of a project
-      #
-      # Parameters:
-      #   id (required) - The ID of a project
-      #   key (required) - The ID of a variable
-      # Example Request:
-      #   DELETE /projects/:id/variables/:key
+      desc 'Delete an existing variable from a project' do
+        success Entities::Variable
+      end
+      params do
+        requires :key, type: String, desc: 'The key of the variable'
+      end
       delete ':id/variables/:key' do
-        variable = user_project.variables.find_by(key: params[:key].to_s)
+        variable = user_project.variables.find_by(key: params[:key])
+        not_found!('Variable') unless variable
 
-        return not_found!('Variable') unless variable
+        # Variables don't have any timestamp. Therfore, destroy unconditionally.
+        status 204
         variable.destroy
-
-        present variable, with: Entities::Variable
       end
     end
   end

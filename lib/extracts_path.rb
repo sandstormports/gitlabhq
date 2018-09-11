@@ -1,9 +1,8 @@
-require 'addressable/uri'
 # Module providing methods for dealing with separating a tree-ish string and a
 # file path string when combined in a request parameter
 module ExtractsPath
   # Raised when given an invalid file path
-  class InvalidPathError < StandardError; end
+  InvalidPathError = Class.new(StandardError)
 
   # Given a string containing both a Git tree-ish, such as a branch or tag, and
   # a filesystem path joined by forward slashes, attempts to separate the two.
@@ -41,9 +40,9 @@ module ExtractsPath
   def extract_ref(id)
     pair = ['', '']
 
-    return pair unless @project
+    return pair unless @project # rubocop:disable Gitlab/ModuleWithInstanceVariables
 
-    if id.match(/^([[:alnum:]]{40})(.+)/)
+    if id =~ /^(\h{40})(.+)/
       # If the ref appears to be a SHA, we're done, just split the string
       pair = $~.captures
     else
@@ -53,12 +52,11 @@ module ExtractsPath
       # Append a trailing slash if we only get a ref and no file path
       id += '/' unless id.ends_with?('/')
 
-      valid_refs = @project.repository.ref_names
-      valid_refs.select! { |v| id.start_with?("#{v}/") }
+      valid_refs = ref_names.select { |v| id.start_with?("#{v}/") }
 
       if valid_refs.length == 0
         # No exact ref match, so just try our best
-        pair = id.match(/([^\/]+)(.*)/).captures
+        pair = id.match(%r{([^/]+)(.*)}).captures
       else
         # There is a distinct possibility that multiple refs prefix the ID.
         # Use the longest match to maximize the chance that we have the
@@ -70,9 +68,22 @@ module ExtractsPath
     end
 
     # Remove ending slashes from path
-    pair[1].gsub!(/^\/|\/$/, '')
+    pair[1].gsub!(%r{^/|/$}, '')
 
     pair
+  end
+
+  # If we have an ID of 'foo.atom', and the controller provides Atom and HTML
+  # formats, then we have to check if the request was for the Atom version of
+  # the ID without the '.atom' suffix, or the HTML version of the ID including
+  # the suffix. We only check this if the version including the suffix doesn't
+  # match, so it is possible to create a branch which has an unroutable Atom
+  # feed.
+  def extract_ref_without_atom(id)
+    id_without_atom = id.sub(/\.atom$/, '')
+    valid_refs = ref_names.select { |v| "#{id_without_atom}/".start_with?("#{v}/") }
+
+    valid_refs.max_by(&:length)
   end
 
   # Assigns common instance variables for views working with Git tree-ish objects
@@ -87,42 +98,67 @@ module ExtractsPath
   # If the :id parameter appears to be requesting a specific response format,
   # that will be handled as well.
   #
+  # If there is no path and the ref doesn't exist in the repo, try to resolve
+  # the ref without an '.atom' suffix. If _that_ ref is found, set the request's
+  # format to Atom manually.
+  #
   # Automatically renders `not_found!` if a valid tree path could not be
   # resolved (e.g., when a user inserts an invalid path or ref).
+  # rubocop:disable Gitlab/ModuleWithInstanceVariables
   def assign_ref_vars
     # assign allowed options
-    allowed_options = ["filter_ref", "extended_sha1"]
+    allowed_options = ["filter_ref"]
     @options = params.select {|key, value| allowed_options.include?(key) && !value.blank? }
     @options = HashWithIndifferentAccess.new(@options)
 
-    @id = Addressable::URI.unescape(get_id)
+    @id = get_id
     @ref, @path = extract_ref(@id)
     @repo = @project.repository
-    if @options[:extended_sha1].blank?
+
+    @commit = @repo.commit(@ref)
+
+    if @path.empty? && !@commit && @id.ends_with?('.atom')
+      @id = @ref = extract_ref_without_atom(@id)
       @commit = @repo.commit(@ref)
-    else
-      @commit = @repo.commit(@options[:extended_sha1])
+
+      request.format = :atom if @commit
     end
 
     raise InvalidPathError unless @commit
 
     @hex_path = Digest::SHA1.hexdigest(@path)
-    @logs_path = logs_file_namespace_project_ref_path(@project.namespace,
-                                                      @project, @ref, @path)
-
+    @logs_path = logs_file_project_ref_path(@project, @ref, @path)
   rescue RuntimeError, NoMethodError, InvalidPathError
     render_404
   end
+  # rubocop:enable Gitlab/ModuleWithInstanceVariables
 
   def tree
-    @tree ||= @repo.tree(@commit.id, @path)
+    @tree ||= @repo.tree(@commit.id, @path) # rubocop:disable Gitlab/ModuleWithInstanceVariables
+  end
+
+  def lfs_blob_ids
+    blob_ids = tree.blobs.map(&:id)
+
+    # When current endpoint is a Blob then `tree.blobs` will be empty, it means we need to analyze
+    # the current Blob in order to determine if it's a LFS object
+    blob_ids = Array.wrap(@repo.blob_at(@commit.id, @path)&.id) if blob_ids.empty? # rubocop:disable Gitlab/ModuleWithInstanceVariables
+
+    @lfs_blob_ids = Gitlab::Git::Blob.batch_lfs_pointers(@project.repository, blob_ids).map(&:id) # rubocop:disable Gitlab/ModuleWithInstanceVariables
   end
 
   private
 
+  # overriden in subclasses, do not remove
   def get_id
     id = params[:id] || params[:ref]
     id += "/" + params[:path] unless params[:path].blank?
     id
+  end
+
+  def ref_names
+    return [] unless @project # rubocop:disable Gitlab/ModuleWithInstanceVariables
+
+    @ref_names ||= @project.repository.ref_names # rubocop:disable Gitlab/ModuleWithInstanceVariables
   end
 end

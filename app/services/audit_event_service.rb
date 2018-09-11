@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class AuditEventService
   def initialize(author, entity, details = {})
     @author, @entity, @details = author, entity, details
@@ -7,8 +9,8 @@ class AuditEventService
     @details = {
       with: @details[:with],
       target_id: @author.id,
-      target_type: "User",
-      target_details: @author.name,
+      target_type: 'User',
+      target_details: @author.name
     }
 
     self

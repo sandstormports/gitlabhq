@@ -9,12 +9,14 @@ module PreferencesHelper
 
   # Maps `dashboard` values to more user-friendly option text
   DASHBOARD_CHOICES = {
-    projects: 'Your Projects (default)',
-    stars:    'Starred Projects',
-    project_activity: "Your Projects' Activity",
-    starred_project_activity: "Starred Projects' Activity",
-    groups: "Your Groups",
-    todos: "Your Todos"
+    projects: _("Your Projects (default)"),
+    stars:    _("Starred Projects"),
+    project_activity: _("Your Projects' Activity"),
+    starred_project_activity: _("Starred Projects' Activity"),
+    groups: _("Your Groups"),
+    todos: _("Your Todos"),
+    issues: _("Assigned Issues"),
+    merge_requests: _("Assigned Merge Requests")
   }.with_indifferent_access.freeze
 
   # Returns an Array usable by a select field for more user-friendly option text
@@ -23,7 +25,7 @@ module PreferencesHelper
 
     if defined.size != DASHBOARD_CHOICES.size
       # Ensure that anyone adding new options updates this method too
-      raise RuntimeError, "`User` defines #{defined.size} dashboard choices," +
+      raise "`User` defines #{defined.size} dashboard choices," \
         " but `DASHBOARD_CHOICES` defined #{DASHBOARD_CHOICES.size}."
     else
       defined.map do |key, _|
@@ -35,21 +37,17 @@ module PreferencesHelper
 
   def project_view_choices
     [
-      ['Readme (default)', :readme],
-      ['Activity view', :activity],
-      ['Files view', :files]
+      ['Files and Readme (default)', :files],
+      ['Activity', :activity],
+      ['Readme', :readme]
     ]
   end
 
   def user_application_theme
-    Gitlab::Themes.for_user(current_user).css_class
+    @user_application_theme ||= Gitlab::Themes.for_user(current_user).css_class
   end
 
   def user_color_scheme
     Gitlab::ColorSchemes.for_user(current_user).css_class
-  end
-
-  def default_project_view
-    current_user ? current_user.project_view : 'readme'
   end
 end

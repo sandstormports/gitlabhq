@@ -1,7 +1,9 @@
-class ProjectServiceWorker
-  include Sidekiq::Worker
+# frozen_string_literal: true
 
-  sidekiq_options queue: :project_web_hook
+class ProjectServiceWorker
+  include ApplicationWorker
+
+  sidekiq_options dead: false
 
   def perform(hook_id, data)
     data = data.with_indifferent_access

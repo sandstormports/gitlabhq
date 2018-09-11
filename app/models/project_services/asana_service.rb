@@ -1,24 +1,3 @@
-# == Schema Information
-#
-# Table name: services
-#
-#  id                    :integer          not null, primary key
-#  type                  :string(255)
-#  title                 :string(255)
-#  project_id            :integer
-#  created_at            :datetime
-#  updated_at            :datetime
-#  active                :boolean          default(FALSE), not null
-#  properties            :text
-#  template              :boolean          default(FALSE)
-#  push_events           :boolean          default(TRUE)
-#  issues_events         :boolean          default(TRUE)
-#  merge_requests_events :boolean          default(TRUE)
-#  tag_push_events       :boolean          default(TRUE)
-#  note_events           :boolean          default(TRUE), not null
-#  build_events          :boolean          default(FALSE), not null
-#
-
 require 'asana'
 
 class AsanaService < Service
@@ -46,7 +25,7 @@ You can create a Personal Access Token here:
 http://app.asana.com/-/account_api'
   end
 
-  def to_param
+  def self.to_param
     'asana'
   end
 
@@ -55,7 +34,8 @@ http://app.asana.com/-/account_api'
       {
         type: 'text',
         name: 'api_key',
-        placeholder: 'User Personal Access Token. User must have access to task, all comments will be attributed to this user.'
+        placeholder: 'User Personal Access Token. User must have access to task, all comments will be attributed to this user.',
+        required: true
       },
       {
         type: 'text',
@@ -65,7 +45,7 @@ http://app.asana.com/-/account_api'
     ]
   end
 
-  def supported_events
+  def self.supported_events
     %w(push)
   end
 
@@ -88,7 +68,7 @@ http://app.asana.com/-/account_api'
     end
 
     user = data[:user_name]
-    project_name = project.name_with_namespace
+    project_name = project.full_name
 
     data[:commits].each do |commit|
       push_msg = "#{user} pushed to branch #{branch} of #{project_name} ( #{commit[:url]} ):"
@@ -104,7 +84,7 @@ http://app.asana.com/-/account_api'
     # - fix/ed/es/ing
     # - close/s/d
     # - closing
-    issue_finder = /(fix\w*|clos[ei]\w*+)?\W*(?:https:\/\/app\.asana\.com\/\d+\/\d+\/(\d+)|#(\d+))/i
+    issue_finder = %r{(fix\w*|clos[ei]\w*+)?\W*(?:https://app\.asana\.com/\d+/\d+/(\d+)|#(\d+))}i
 
     message.scan(issue_finder).each do |tuple|
       # tuple will be

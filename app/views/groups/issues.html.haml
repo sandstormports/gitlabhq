@@ -1,27 +1,16 @@
 - page_title "Issues"
-- header_title group_title(@group, "Issues", issues_group_path(@group))
 = content_for :meta_tags do
-  - if current_user
-    = auto_discovery_link_tag(:atom, issues_group_url(@group, format: :atom, private_token: current_user.private_token), title: "#{@group.name} issues")
+  = auto_discovery_link_tag(:atom, safe_params.merge(rss_url_options).to_h, title: "#{@group.name} issues")
 
-.top-area
-  = render 'shared/issuable/nav', type: :issues
-  .nav-controls
-    - if current_user
-      = link_to issues_group_url(@group, format: :atom, private_token: current_user.private_token), class: 'btn' do
-        = icon('rss')
-        %span.icon-label
-          Subscribe
-    = render 'shared/new_project_item_select', path: 'issues/new', label: "New Issue"
+- if group_issues_count(state: 'all').zero?
+  = render 'shared/empty_states/issues', project_select_button: true
+- else
+  .top-area
+    = render 'shared/issuable/nav', type: :issues
+    .nav-controls
+      = render 'shared/issuable/feed_buttons'
+      = render 'shared/new_project_item_select', path: 'issues/new', label: "New issue", type: :issues, with_feature_enabled: 'issues'
 
-= render 'shared/issuable/filter', type: :issues
+  = render 'shared/issuable/search_bar', type: :issues
 
-.gray-content-block.second-block
-  Only issues from
-  %strong #{@group.name}
-  group are listed here.
-  - if current_user
-    To see all issues you should visit #{link_to 'dashboard', issues_dashboard_path} page.
-
-.prepend-top-default
   = render 'shared/issues'

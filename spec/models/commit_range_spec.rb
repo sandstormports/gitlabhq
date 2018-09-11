@@ -1,13 +1,13 @@
 require 'spec_helper'
 
-describe CommitRange, models: true do
+describe CommitRange do
   describe 'modules' do
     subject { described_class }
 
     it { is_expected.to include_module(Referable) }
   end
 
-  let!(:project) { create(:project, :public) }
+  let!(:project) { create(:project, :public, :repository) }
   let!(:commit1) { project.commit("HEAD~2") }
   let!(:commit2) { project.commit }
 
@@ -24,6 +24,16 @@ describe CommitRange, models: true do
     expect { described_class.new("Foo", project) }.to raise_error(ArgumentError)
   end
 
+  describe '#initialize' do
+    it 'does not modify strings in-place' do
+      input = "#{sha_from}...#{sha_to}   "
+
+      described_class.new(input, project)
+
+      expect(input).to eq("#{sha_from}...#{sha_to}   ")
+    end
+  end
+
   describe '#to_s' do
     it 'is correct for three-dot syntax' do
       expect(range.to_s).to eq "#{full_sha_from}...#{full_sha_to}"
@@ -35,7 +45,7 @@ describe CommitRange, models: true do
   end
 
   describe '#to_reference' do
-    let(:cross) { create(:project) }
+    let(:cross) { create(:project, namespace: project.namespace) }
 
     it 'returns a String reference to the object' do
       expect(range.to_reference).to eq "#{full_sha_from}...#{full_sha_to}"
@@ -46,12 +56,12 @@ describe CommitRange, models: true do
     end
 
     it 'supports a cross-project reference' do
-      expect(range.to_reference(cross)).to eq "#{project.to_reference}@#{full_sha_from}...#{full_sha_to}"
+      expect(range.to_reference(cross)).to eq "#{project.path}@#{full_sha_from}...#{full_sha_to}"
     end
   end
 
   describe '#reference_link_text' do
-    let(:cross) { create(:project) }
+    let(:cross) { create(:project, namespace: project.namespace) }
 
     it 'returns a String reference to the object' do
       expect(range.reference_link_text).to eq "#{sha_from}...#{sha_to}"
@@ -62,17 +72,7 @@ describe CommitRange, models: true do
     end
 
     it 'supports a cross-project reference' do
-      expect(range.reference_link_text(cross)).to eq "#{project.to_reference}@#{sha_from}...#{sha_to}"
-    end
-  end
-
-  describe '#reference_title' do
-    it 'returns the correct String for three-dot ranges' do
-      expect(range.reference_title).to eq "Commits #{full_sha_from} through #{full_sha_to}"
-    end
-
-    it 'returns the correct String for two-dot ranges' do
-      expect(range2.reference_title).to eq "Commits #{full_sha_from}^ through #{full_sha_to}"
+      expect(range.reference_link_text(cross)).to eq "#{project.path}@#{sha_from}...#{sha_to}"
     end
   end
 
@@ -133,6 +133,29 @@ describe CommitRange, models: true do
       it 'returns false' do
         expect(range).not_to be_valid_commits
       end
+    end
+  end
+
+  describe '#has_been_reverted?' do
+    let(:issue) { create(:issue) }
+    let(:user) { issue.author }
+
+    it 'returns true if the commit has been reverted' do
+      create(:note_on_issue,
+             noteable: issue,
+             system: true,
+             note: commit1.revert_description(user),
+             project: issue.project)
+
+      expect_any_instance_of(Commit).to receive(:reverts_commit?)
+        .with(commit1, user)
+        .and_return(true)
+
+      expect(commit1.has_been_reverted?(user, issue.notes_with_associations)).to eq(true)
+    end
+
+    it 'returns false if the commit has not been reverted' do
+      expect(commit1.has_been_reverted?(user, issue.notes_with_associations)).to eq(false)
     end
   end
 end

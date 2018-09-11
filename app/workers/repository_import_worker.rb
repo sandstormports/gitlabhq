@@ -1,24 +1,50 @@
+# frozen_string_literal: true
+
 class RepositoryImportWorker
-  include Sidekiq::Worker
-  include Gitlab::ShellAdapter
-
-  sidekiq_options queue: :gitlab_shell
-
-  attr_accessor :project, :current_user
+  include ApplicationWorker
+  include ExceptionBacktrace
+  include ProjectStartImport
+  include ProjectImportOptions
 
   def perform(project_id)
     @project = Project.find(project_id)
-    @current_user = @project.creator
 
-    result = Projects::ImportService.new(project, current_user).execute
+    return unless start_import
+
+    Gitlab::Metrics.add_event(:import_repository)
+
+    service = Projects::ImportService.new(project, project.creator)
+    result = service.execute
+
+    # Some importers may perform their work asynchronously. In this case it's up
+    # to those importers to mark the import process as complete.
+    return if service.async?
 
     if result[:status] == :error
-      project.update(import_error: result[:message])
-      project.import_fail
-      return
+      fail_import(result[:message]) if template_import?
+
+      raise result[:message]
     end
 
-    project.repository.after_import
-    project.import_finish
+    project.after_import
+  end
+
+  private
+
+  attr_reader :project
+
+  def start_import
+    return true if start(project)
+
+    Rails.logger.info("Project #{project.full_path} was in inconsistent state (#{project.import_status}) while importing.")
+    false
+  end
+
+  def fail_import(message)
+    project.mark_import_as_failed(message)
+  end
+
+  def template_import?
+    project.gitlab_project_import?
   end
 end

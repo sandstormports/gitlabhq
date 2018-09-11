@@ -1,27 +1,19 @@
-FactoryGirl.define do
+FactoryBot.define do
   factory :project_member do
     user
     project
-    master
+    maintainer
 
-    trait :guest do
-      access_level ProjectMember::GUEST
-    end
+    trait(:guest)     { access_level ProjectMember::GUEST }
+    trait(:reporter)  { access_level ProjectMember::REPORTER }
+    trait(:developer) { access_level ProjectMember::DEVELOPER }
+    trait(:maintainer) { access_level ProjectMember::MAINTAINER }
+    trait(:access_request) { requested_at Time.now }
 
-    trait :reporter do
-      access_level ProjectMember::REPORTER
-    end
-
-    trait :developer do
-      access_level ProjectMember::DEVELOPER
-    end
-
-    trait :master do
-      access_level ProjectMember::MASTER
-    end
-
-    trait :owner do
-      access_level ProjectMember::OWNER
+    trait(:invited) do
+      user_id nil
+      invite_token 'xxx'
+      invite_email 'email@email.com'
     end
   end
 end

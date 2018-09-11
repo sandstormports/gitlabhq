@@ -1,8 +1,10 @@
 class Admin::BroadcastMessagesController < Admin::ApplicationController
+  include BroadcastMessagesHelper
+
   before_action :finder, only: [:edit, :update, :destroy]
 
   def index
-    @broadcast_messages = BroadcastMessage.reorder("ends_at DESC").page(params[:page])
+    @broadcast_messages = BroadcastMessage.order(ends_at: :desc).page(params[:page])
     @broadcast_message  = BroadcastMessage.new
   end
 
@@ -32,12 +34,13 @@ class Admin::BroadcastMessagesController < Admin::ApplicationController
 
     respond_to do |format|
       format.html { redirect_back_or_default(default: { action: 'index' }) }
-      format.js { render nothing: true }
+      format.js { head :ok }
     end
   end
 
   def preview
-    @message = broadcast_message_params[:message]
+    broadcast_message = BroadcastMessage.new(broadcast_message_params)
+    render json: { message: render_broadcast_message(broadcast_message) }
   end
 
   protected

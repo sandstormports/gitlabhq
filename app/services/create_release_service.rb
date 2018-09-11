@@ -1,8 +1,7 @@
-require_relative 'base_service'
+# frozen_string_literal: true
 
 class CreateReleaseService < BaseService
   def execute(tag_name, release_description)
-
     repository = project.repository
     existing_tag = repository.find_tag(tag_name)
 
@@ -24,8 +23,6 @@ class CreateReleaseService < BaseService
   end
 
   def success(release)
-    out = super()
-    out[:release] = release
-    out
+    super().merge(release: release)
   end
 end
